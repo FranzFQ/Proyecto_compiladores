@@ -413,17 +413,10 @@ class FlowMainWindow(QMainWindow):
             QMessageBox.warning(self, "Advertencia", "No hay figuras seleccionadas para eliminar.")
 
 
-    def compile_flowchart(self): 
-        if not self.scene.start_node:
-            self.compilation_output_label.setText("Error: No se ha definido un nodo de inicio.\n"
-                                                  "Añada una figura 'Inicio/Fin'.")
-            QMessageBox.warning(self, "Error de Compilación", "No se ha definido un nodo de inicio.")
-            return
-
+    def analisis_connections(self, initial_node):
         final_flow_steps = []
         visited_nodes_ids = set()
         processing_queue = deque()
-        
         if self.scene.start_node:
             processing_queue.append(self.scene.start_node)
         
@@ -446,9 +439,42 @@ class FlowMainWindow(QMainWindow):
              self.compilation_output_label.setText("El nodo de inicio no tiene conexiones salientes o no se pudo procesar el flujo.")
              return
 
+        return final_flow_steps
+    
+    def compile_flowchart(self): 
+        if not self.scene.start_node:
+            self.compilation_output_label.setText("Error: No se ha definido un nodo de inicio.\n"
+                                                  "Añada una figura 'Inicio/Fin'.")
+            QMessageBox.warning(self, "Error de Compilación", "No se ha definido un nodo de inicio.")
+            return
+        final_flow_steps = []
+        #Diccionario el cual contiene las funciones
+        #Ejamplo de como se guardan: {"Nombre de la funcion": [Nodo1, nodo2, nodo3]}
+        diccionary_functions = {}
+        
+        for item in self.scene.items():
+            if isinstance(item, QGraphicsLineItem):
+                pass
+            elif isinstance(item, FlowShape):
+                for function in diccionary_functions:
+                    if item.text.strip() == function: 
+                        QMessageBox.warning(self, "Error de sintaxis", "Se detectaron dos funciones con el mismo nombre")
+                        break
+
+                if item.shape_type == "start_end" and item.text == "inicio":
+                        final_flow_steps = self.analisis_connections(item)
+                        diccionary_functions[item.text.strip()] = final_flow_steps
+
+                elif item.shape_type == "start_end":
+                        final_flow_steps = self.analisis_connections(item)
+                        diccionary_functions[item.text.strip()] = final_flow_steps
+
         output_text = "Orden de Ejecución Detectado:\n"
-        for i, node in enumerate(final_flow_steps):
-            node_text = node.text.strip() if node.text.strip() else node.shape_type
-            output_text += f"{i+1}. {node_text} (Tipo: {node.shape_type})\n"
+        for i, function in enumerate(diccionary_functions):
+            keys = list(diccionary_functions.keys())
+            output_text += f"\nNodos de la funcion: {keys[i]}\n"
+            for j, node in enumerate(diccionary_functions[function]):
+                node_text = f"Nodo: {node.text.strip() if node.text.strip() else node.shape_type}"
+                output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type})\n"
 
         self.compilation_output_label.setText(output_text)
