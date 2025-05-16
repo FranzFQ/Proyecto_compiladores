@@ -1,4 +1,5 @@
 import sys
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsItem,
     QGraphicsLineItem, QToolBar, QVBoxLayout, QWidget, QInputDialog, QLineEdit,
@@ -10,6 +11,8 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import Qt, QPointF, QRectF, QLineF
 import uuid
 from collections import deque
+
+from parser import Parser
 
 
 class ConnectionNode:
@@ -417,8 +420,10 @@ class FlowMainWindow(QMainWindow):
         final_flow_steps = []
         visited_nodes_ids = set()
         processing_queue = deque()
-        if self.scene.start_node:
+        if self.scene.start_node and initial_node == self.scene.start_node:
             processing_queue.append(self.scene.start_node)
+        else:
+            processing_queue.append(initial_node)
         
         while processing_queue:
             current_node_for_bfs = processing_queue.popleft()
@@ -478,3 +483,21 @@ class FlowMainWindow(QMainWindow):
                 output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type})\n"
 
         self.compilation_output_label.setText(output_text)
+
+        diccionary_functions['conn'] = self.scene.connections
+
+
+        current = self.scene.connections.head
+        while current:
+            print(current)
+            print("Forma desde:", current.from_item.shape_type)
+            print("Texto desde:", current.from_item.text)
+            print("Forma hasta:", current.to_item.shape_type)
+            print("Texto hasta:", current.to_item.text)
+            current = current.next
+
+
+        parser = Parser(diccionary_functions)
+        parser.generate_code()
+
+        
