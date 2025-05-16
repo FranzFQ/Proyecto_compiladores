@@ -52,20 +52,11 @@ class Parser:
 
       return codegen
           
-  def parse(self, name: str, current_id=None, on_loop=False, convergence=None, expecting=None, visited=None) -> str:
-      code = ""
+  def parse(self, name: str, current_id=None, on_loop=False, convergence=None, expecting=None) -> str:
       if current_id is None:
          current_id, value = next(iter(self.current_graph.items()))
          return self.parse(name, current_id)
       else:
-         if visited is None:
-            visited = set()
-
-         if current_id in visited:
-            return code
-         else:
-            visited.add(current_id)
-
          looping = False
          if not on_loop:
             looping = self.verify_loop(current_id)
@@ -73,12 +64,12 @@ class Parser:
             looping = on_loop  
 
          if expecting is not None:
-            if str(id(expecting)) == current_id:
-                return code 
+            if expecting == current_id and looping:
+                return "" 
 
          if convergence is not None:
-            if current_id == str(id(convergence)):
-               return code   
+            if current_id == convergence:
+               return ""   
           
          identity = self.current_graph[current_id]
          node = identity[0]
@@ -91,62 +82,64 @@ class Parser:
 
          if node.shape_type == 'start_end':
             if node.text == 'start':
-                code += f"""
+                return f"""
                 int {name}() 
                 {{ 
-                  {self.parse(name, str(id(edges[0])), looping, visited=visited)} 
+                  {self.parse(name, str(id(edges[0])), looping, convergence=convergence, expecting=expecting)} 
                 }}"""
             elif node.text == 'end':
-               code += "return 0;"
+               return "return 0;"
             else:
-               code += f"""
+               return f"""
                int {node.text} 
                {{ 
-                 {self.parse(name, str(id(edges[0])), looping, visited=visited)} 
+                 {self.parse(name, str(id(edges[0])), looping, convergence=convergence, expecting=expecting)} 
                }}"""
          elif node.shape_type == 'process':
               if is_last:
-                code += f"""{node.text};"""
-                return code;
-              code += f"""{node.text}; 
-              {self.parse(name, str(id(edges[0])), looping, visited=visited)}"""
+                return f"""{node.text};"""
+              return f"""{node.text}; 
+              {self.parse(name, str(id(edges[0])), looping, convergence=convergence, expecting=expecting)}"""
 
          elif node.shape_type == 'input_output':
-              frac = node.text.split(' ')
+              frac = node.text.split(' ', 1)
               if len(frac) != 2:
                   raise ValueError("Invalid input/output format")
               else:
                   if frac[0] == 'read':
                     if is_last:
-                      code += f"""print({frac[1]});"""
-                      return code;
-                    code += f"""print({frac[1]});
-                    {self.parse(name, str(id(edges[0])), looping, visited=visited)}"""
+                      return f"""print({frac[1]});"""
+                    return f"""print({frac[1]});
+                    {self.parse(name, str(id(edges[0])), looping, convergence=convergence, expecting=expecting)}"""
                   elif frac[0] == 'write':
                     if is_last:
-                      code += f"""input({frac[1]});"""
-                      return code;
+                      return f"""input({frac[1]});"""
                     code += f"""input({frac[1]});
-                    {self.parse(name, str(id(edges[0])), looping, visited=visited)}"""
+                    {self.parse(name, str(id(edges[0])), looping, convergence=convergence, expecting=expecting)}"""
                   else:
                     raise ValueError("Invalid input/output format")
-         elif node.shape_type == 'decision' and on_loop:
-            code += f"""while ({node.text}) {{
-              {self.parse(name, str(id(edges[0])), looping, expecting=node, visited=visited)}
+         elif node.shape_type == 'decision' and looping:
+            return f"""while ({node.text}) {{
+              {self.parse(name, str(id(edges[0])), looping, expecting=current_id, convergence=convergence)}
             }}
             {self.parse(name, str(id(edges[1])), False)}"""
-         elif node.shape_type == 'decision' and not on_loop:
+         elif node.shape_type == 'decision' and not looping:
+            code = ""
             conv = self.get_convergence(current_id)
+
+            if len(edges) < 2:
+               raise ConnectionError("No hay conexiones suficientes en la decision")
+
             code += f"""if ({node.text}) {{
-              {self.parse(name, str(id(edges[0])), convergence=conv, visited=visited)}
+              {self.parse(name, str(id(edges[0])), convergence=conv, expecting=expecting)}
             }} else {{
-              {self.parse(name, str(id(edges[1])), convergence=conv, visited=visited)}
+              {self.parse(name, str(id(edges[1])), convergence=conv, expecting=expecting)}
             }}
             """ 
             if conv is not None:
-               code += f"""{self.parse(name, conv)}"""
-         print(code)  
-         return code
+              code += f"""{self.parse(name, conv, expecting=expecting)}"""
+               
+            return code
            
   def verify_loop(self, current_id: str) -> bool:
       found = False
@@ -159,15 +152,21 @@ class Parser:
           if key == current_id:
               found = True
       return False 
+  
+  def loop_expecting_nodes(self, original_id: str, current_id: str, l: list = []):
+      if original_id == current_id:
+         return l
+      else:
+         l.append(current_id)
+         self.loop_expecting_nodes(original_id, self.current_graph[current_id][1][0], l)
 
-  from collections import defaultdict
 
   def get_convergence(self, current_id: str):
       visit_count = defaultdict(set)  
       routes = self.current_graph[current_id][1]
 
-      for route_id, destino in enumerate(routes):
-          self.dfs(destino, self.current_graph, route_id, visit_count, set())
+      for route_id, destiny in enumerate(routes):
+          self.dfs(destiny, self.current_graph, route_id, visit_count, set())
 
       for node, linked_routes in visit_count.items():
           if len(linked_routes) >= 2:
@@ -176,13 +175,16 @@ class Parser:
       return None
 
   def dfs(self, node, graph, route_id, visit_count, local_visited):
-      if node in local_visited:
-          return
-      local_visited.add(node)
-      visit_count[node].add(route_id)
+    node_id = str(id(node)) if not isinstance(node, str) else node
 
-      for siguiente in graph[node][1]:
-          self.dfs(siguiente, graph, route_id, visit_count, local_visited.copy())  
+    if node_id in local_visited:
+        return
+    local_visited.add(node_id)
+    visit_count[node_id].add(route_id)
+
+    for next_node in graph[node_id][1]:
+        next_id = str(id(next_node))
+        self.dfs(next_id, graph, route_id, visit_count, local_visited.copy())  
 
   def synthesize_conn(self, connections: list) -> dict:
       synth_dict = {}
