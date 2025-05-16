@@ -1,14 +1,14 @@
 import sys
 
-from PyQt6.QtWidgets import (
+from PyQt6.QtWidgets import ( # type: ignore
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsItem,
     QGraphicsLineItem, QToolBar, QVBoxLayout, QWidget, QInputDialog, QLineEdit,
     QMessageBox, QHBoxLayout, QLabel, QSizePolicy, QPushButton
 )
-from PyQt6.QtGui import (
+from PyQt6.QtGui import ( # type: ignore
     QPolygonF, QPen, QColor, QAction, QPainter, QCursor
 )
-from PyQt6.QtCore import Qt, QPointF, QRectF, QLineF
+from PyQt6.QtCore import Qt, QPointF, QRectF, QLineF # type: ignore
 import uuid
 from collections import deque
 
@@ -498,6 +498,8 @@ class FlowMainWindow(QMainWindow):
 
 
         parser = Parser(diccionary_functions)
-        parser.generate_code()
+        codigo_c = parser.generate_code()
+
+        print(codigo_c)
 
         
