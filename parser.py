@@ -124,13 +124,13 @@ class Parser:
               if len(frac) != 2:
                   raise ValueError("Invalid input/output format")
               else:
-                  if frac[0] == 'read':
+                  if frac[0] == 'write':
                     if is_last:
                       return f"""print({frac[1]});"""
                     return f"""print({frac[1]});
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
-                  elif frac[0] == 'write':
+                  elif frac[0] == 'read':
                     if is_last:
                       return f"""input({frac[1]});"""
                     code += f"""input({frac[1]});
@@ -144,7 +144,7 @@ class Parser:
               {self.parse(name, str(id(edges[0])), looping, 
                           expecting=expecting, convergence=convergence, visited=visited)}
             }}
-            {self.parse(name, str(id(edges[1])), False, visited=visited)}"""
+            {self.parse(name, str(id(edges[1])), False, visited=visited, convergence=convergence, expecting=expecting)}"""
          elif node.shape_type == 'decision' and not looping:
             conv = self.get_convergence(current_id)
             if len(edges) < 2:
