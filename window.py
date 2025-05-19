@@ -22,6 +22,9 @@ class ConnectionNode:
         self.line_item = line_item
         self.next = None
 
+    def __str__(self):
+        return f"{self.from_item.text} -> {self.to_item.text}"
+
 
 class ConnectionList:
     def __init__(self):
@@ -480,22 +483,11 @@ class FlowMainWindow(QMainWindow):
             output_text += f"\nNodos de la funcion: {keys[i]}\n"
             for j, node in enumerate(diccionary_functions[function]):
                 node_text = f"Nodo: {node.text.strip() if node.text.strip() else node.shape_type}"
-                output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type})\n"
+                output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type} (dir: {node}) (id: {id(node)}))\n"
 
         self.compilation_output_label.setText(output_text)
 
         diccionary_functions['conn'] = self.scene.connections
-
-
-        current = self.scene.connections.head
-        while current:
-            print(current)
-            print("Forma desde:", current.from_item.shape_type)
-            print("Texto desde:", current.from_item.text)
-            print("Forma hasta:", current.to_item.shape_type)
-            print("Texto hasta:", current.to_item.text)
-            current = current.next
-
 
         parser = Parser(diccionary_functions)
         codigo_c = parser.generate_code()

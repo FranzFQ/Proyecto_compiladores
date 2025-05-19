@@ -34,7 +34,7 @@ class Parser:
   def generate_code(self) -> str:
       self.set_ind_functions()
       for func_name, connections in self.ind_functions.items():
-          self.current_graph = self.synthesize_conn(connections)
+          self.current_graph = connections
           if func_name == 'start':
               self.code['main'] = self.parse('main')
           else:
@@ -54,16 +54,11 @@ class Parser:
       return codegen
           
   def parse(self, name: str, current_id=None, on_loop=False, 
-            convergence=deque(), expecting=deque(), visited=None) -> str:
+            convergence=None, expecting=deque(), visited=None) -> str:
       if current_id is None:
          current_id, value = next(iter(self.current_graph.items()))
          return self.parse(name=name, current_id=current_id, visited=[])
       else:
-         if current_id in visited:
-            if not on_loop:
-               return ""
-         else:
-            visited.append(current_id)
 
          looping = False
          if not on_loop:
@@ -71,19 +66,22 @@ class Parser:
          else:
             looping = on_loop  
 
+         if convergence is not None:
+            if current_id == convergence:
+               return ""
+
+         if current_id in visited:
+            if not on_loop:
+               return ""
+         else:
+            visited.append(current_id)
+  
          if len(expecting) > 0:
             last = expecting.pop()
             if last == current_id and looping:
                 return "" 
             else:
-               expecting.append(last)
-
-         if len(convergence) > 0:
-            last = convergence.pop()
-            if current_id == last:
-               return ""
-            else:
-               convergence.append(last)   
+               expecting.append(last)  
           
          identity = self.current_graph[current_id]
          node = identity[0]
@@ -152,15 +150,14 @@ class Parser:
          
             if conv is not None:
               old_convergence = copy.copy(convergence)
-              convergence.append(conv)
               return f"""if ({node.text}) {{
                   {self.parse(name, str(id(edges[0])), on_loop=looping, 
-                              convergence=convergence, expecting=expecting, visited=visited)}
+                              convergence=conv, expecting=expecting, visited=visited)}
                 }} else {{
                   {self.parse(name, str(id(edges[1])), on_loop=looping, 
-                              convergence=convergence, expecting=expecting, visited=visited)}
+                              convergence=conv, expecting=expecting, visited=visited)}
                 }}
-                {self.parse(name, current_id=str(id(edges[1])), on_loop=looping, 
+                {self.parse(name, current_id=str(conv), on_loop=looping, 
                             convergence=old_convergence, expecting=expecting, visited=visited)}
             """
             else:
@@ -171,6 +168,7 @@ class Parser:
                   {self.parse(name, str(id(edges[1])), on_loop=looping, 
                               convergence=convergence, expecting=expecting, visited=visited)}
                 }}"""
+      return ""
                
            
   def verify_loop(self, current_id: str) -> bool:
@@ -244,25 +242,70 @@ class Parser:
             synth_dict[str(id(to_item))] = (to_item, identity_to)
       
       return synth_dict
-     
-
-  def search_id(self, id_: str):
-    for key, value in self.flow_graph.items():
-      if key == 'conn':
-        break
-      else:
-        for item in value:
-          if str(id(item)) == id_:
-            return key
 
   def set_ind_functions(self):
-    current = self.flow_graph['conn'].head
-    while current:
-      func_name = self.search_id(str(id(current.from_item)))
-      if func_name not in self.ind_functions:
-        self.ind_functions[func_name] = []
-      self.ind_functions[func_name].append(current)
-      current = current.next
+    self.remove_connectors()
+    graph = self.synthesize_conn(self.flow_graph['conn'])
+    visited = set()
+    subgraphs = {}
+    
+    for node_key in graph:
+        if node_key not in visited:
+            subgraph = {}
+            queue = deque()
+            queue.append(node_key)
+            visited.add(node_key)
+            
+            try:
+                first_node_payload = graph[node_key][0]
+                first_node_payload_text = first_node_payload.text
+            except (AttributeError, IndexError) as e:
+                first_node_payload_text = str(node_key)
+            
+            iteration_count = 0
+            max_iterations = len(graph) * 2
+            
+            while queue and iteration_count < max_iterations:
+                iteration_count += 1
+                current_key = queue.popleft()
+                
+                if current_key not in graph:
+                    continue
+                
+                subgraph[current_key] = graph[current_key]
+                
+                for neighbor in graph[current_key][1]:
+                    if neighbor not in visited:
+                        visited.add(str(id(neighbor)))
+                        queue.append(str(id(neighbor)))
+            
+            if iteration_count >= max_iterations:
+                print()
+            
+            subgraphs[first_node_payload_text] = subgraph
+    
+    self.ind_functions = subgraphs
+    
+    
 
-  
+  def remove_connectors(self):
+     conn_list = []
+     current = self.flow_graph['conn'].head
+     while current:
+        conn_list.append(current)
+        current = current.next
 
+     conn_from = None
+     conn_to = None    
+     for conn in conn_list:
+        if conn.to_item.shape_type == 'connector':
+           for _conn in conn_list:
+              if _conn.from_item.shape_type == 'connector' and _conn.from_item.text == conn.to_item.text:
+                 conn_from = conn
+                 conn_to = _conn
+
+     if conn_to and conn_from:
+        conn_from.to_item = conn_to.to_item
+        conn_list.remove(conn_to)
+
+     self.flow_graph['conn'] = conn_list
