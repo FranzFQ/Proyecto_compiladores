@@ -60,13 +60,16 @@ class NodoPrograma(NodoAST):
         codigo.append("section .data")
         for var, tipo in self.variables.items():
             # Se debe implementar que dependiendo del tipo de variable se reserve el espacio necesario
+            
             if tipo == 'int':
                 codigo.append(f"   {var} dd 0")
             elif tipo == 'float':
                 codigo.append(f"   {var} dd 0.0")
             elif tipo == 'str':
                 # Reservar espacio para una cadena de caracteres
-                codigo.append(f"   {var} db 0x00")
+                # Verificar que la cadena no exista en la tabla de cadenas
+                if var not in self.cadenas:
+                    codigo.append(f"   {var} times 128 db 0")
             elif tipo == 'char':
                 # Reservar espacio para un carácter
                 codigo.append(f"   {var} db 0x00")
@@ -126,8 +129,6 @@ class NodoFuncion(NodoAST):
         for instruccion in self.cuerpo:
             codigo.append(instruccion.generar_codigo())
         
-        if self.nombre[1] != 'main':
-            codigo.append('   ret')
         
         return '\n'.join(codigo)
 
@@ -154,6 +155,16 @@ class NodoAsignacion(NodoAST):
         codigo = self.expresion.generar_codigo()
         codigo += f'\n   mov [{self.nombre[1]}], eax; Guardar resultado en {self.nombre[1]}'
         return codigo
+    
+class NodoAsignacionCadena(NodoAST):
+    # Nodo que representa una asignación de cadena
+    def __init__(self, nombre, expresion):
+        self.nombre = nombre
+        self.expresion = expresion
+
+    def generar_codigo(self):
+        # No se necesita código, ya que se declara en la sección de datos
+        return ""
 
 
 class NodoOperacion(NodoAST):
@@ -247,7 +258,6 @@ class NodoIdentificador(NodoAST):
         return self.nombre[1]
 
     def generar_codigo(self):
-        # print(f"Generando código para {self.nombre}")
         if self.tipo == 'int':
             return f'   mov eax, [{self.nombre[1]}] ; Cargar variable {self.nombre[1]} en eax'
         elif self.tipo == 'float':
@@ -268,6 +278,14 @@ class NodoNumero(NodoAST):
     
     def generar_codigo(self):
         return f'   mov eax, {self.valor} ; Cargar número {self.valor} en eax'
+    
+class NodoDeclaracionVariable(NodoAST):
+    def __init__(self, nombre, tipo):
+        self.nombre = nombre
+        self.tipo = tipo
+
+    def generar_codigo(self):
+        return '' # No se necesita código, ya que se declara en la sección de datos
     
 
 class NodoWhile(NodoAST):
@@ -376,9 +394,10 @@ class NodoInput(NodoAST):
         codigo = []
         # Llamar a la función de entrada
         # La función input recibirá el valor en el buffer que se le envíe en eax
-        codigo.append(f'   mov eax, {self.variable[1]} ; Cargar dirección de la variable en eax')
+        codigo.append(f'   mov eax, {self.variable.nombre[1]} ; Cargar dirección de la variable en eax')
         # Llamar a la función input
         codigo.append(f'   call input')
+
         # Guardar el resultado en la variable
         return "\n".join(codigo)
 
@@ -395,6 +414,7 @@ class NodoPrint(NodoAST):
         
         # Determinar el tipo de variable para llamar a la función correcta
         if isinstance(self.variable, NodoIdentificador):
+            # print(f"Generando código para print: {self.variable.nombre[1]} de tipo {self.variable.tipo}")
             # Verificar si es una cadena (comienza con "cadena_")
             if self.variable.nombre[1].startswith('cadena_'):
                 codigo.append('   call printStr')
@@ -504,8 +524,24 @@ class AnalizadorSemantico:
                 nodo.variable = NodoIdentificador(('IDENTIFIER', nombre_cadena), 'str')  # Reemplazar la cadena por su nombre
             elif isinstance(nodo.variable, NodoIdentificador):
                 # Verificar si la variable existe
-                self.tabla_simbolos.obtener_tipo_variable(nodo.variable.nombre[1])
-        
+                tipo = self.tabla_simbolos.obtener_tipo_variable(nodo.variable.nombre[1])
+                if tipo == 'str':
+                    nodo.variable.tipo = 'str'
+                elif tipo == 'int':
+                    nodo.variable.tipo = 'int'
+                elif tipo == 'float':
+                    nodo.variable.tipo = 'float'
+                elif tipo == 'char':
+                    nodo.variable.tipo = 'char'
+                else:
+                    raise Exception(f"Error: Tipo de variable '{nodo.variable.nombre[1]}' no soportado en print")            
+
+        elif isinstance(nodo, NodoDeclaracionVariable):
+            # Verificar si la variable ya existe
+            if nodo.nombre[1] in self.tabla_simbolos.variables:
+                raise Exception(f"Error: Variable '{nodo.nombre[1]}' ya declarada")
+            # Declarar la variable en la tabla de símbolos
+            self.tabla_simbolos.declarar_variable(nodo.nombre[1], nodo.tipo)
         elif isinstance(nodo, NodoIdentificador):
             return self.tabla_simbolos.obtener_tipo_variable(nodo.nombre[1])
         elif isinstance(nodo, NodoNumero):
@@ -517,6 +553,12 @@ class AnalizadorSemantico:
             return "int"  # Por defecto, consideramos que es un entero
         elif isinstance(nodo, NodoCadena):
             return "str"
+        elif isinstance(nodo, NodoAsignacionCadena):
+            nombre_cadena = nodo.nombre[1]
+            cadena = nodo.expresion
+            # Verificar si la cadena ya existe
+            self.tabla_simbolos.declarar_cadena(nombre_cadena, cadena)
+            self.tabla_simbolos.declarar_variable(nombre_cadena, 'str')
         elif isinstance(nodo, NodoOperacion):
             tipo_izq = self.analizar(nodo.izquierda)
             tipo_der = self.analizar(nodo.derecha)
@@ -542,5 +584,11 @@ class AnalizadorSemantico:
         elif isinstance(nodo, NodoPrograma):
             for funcion in nodo.funciones:
                 self.analizar(funcion)
+        elif isinstance(nodo, NodoInput):
+            # Verificar si la variable existe
+            if isinstance(nodo.variable, NodoIdentificador):
+                self.tabla_simbolos.obtener_tipo_variable(nodo.variable.nombre[1])
+            else:
+                raise Exception(f"Error: La variable '{nodo.variable}' no está declarada")
         elif isinstance(nodo, NodoRetorno):
             tipo_expr = self.analizar(nodo.expresion)

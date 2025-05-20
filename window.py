@@ -450,48 +450,52 @@ class FlowMainWindow(QMainWindow):
         return final_flow_steps
     
     def compile_flowchart(self): 
-        if not self.scene.start_node:
-            self.compilation_output_label.setText("Error: No se ha definido un nodo de inicio.\n"
-                                                  "Añada una figura 'Inicio/Fin'.")
-            QMessageBox.warning(self, "Error de Compilación", "No se ha definido un nodo de inicio.")
-            return
-        final_flow_steps = []
-        #Diccionario el cual contiene las funciones
-        #Ejamplo de como se guardan: {"Nombre de la funcion": [Nodo1, nodo2, nodo3]}
-        diccionary_functions = {}
-        
-        for item in self.scene.items():
-            if isinstance(item, QGraphicsLineItem):
-                pass
-            elif isinstance(item, FlowShape):
-                for function in diccionary_functions:
-                    if item.text.strip() == function: 
-                        QMessageBox.warning(self, "Error de sintaxis", "Se detectaron dos funciones con el mismo nombre")
-                        break
+        try:
+            if not self.scene.start_node:
+                self.compilation_output_label.setText("Error: No se ha definido un nodo de inicio.\n"
+                                                    "Añada una figura 'Inicio/Fin'.")
+                QMessageBox.warning(self, "Error de Compilación", "No se ha definido un nodo de inicio.")
+                return
+            final_flow_steps = []
+            #Diccionario el cual contiene las funciones
+            #Ejamplo de como se guardan: {"Nombre de la funcion": [Nodo1, nodo2, nodo3]}
+            diccionary_functions = {}
+            
+            for item in self.scene.items():
+                if isinstance(item, QGraphicsLineItem):
+                    pass
+                elif isinstance(item, FlowShape):
+                    for function in diccionary_functions:
+                        if item.text.strip() == function: 
+                            QMessageBox.warning(self, "Error de sintaxis", "Se detectaron dos funciones con el mismo nombre")
+                            break
 
-                if item.shape_type == "start_end" and item.text == "inicio":
-                        final_flow_steps = self.analisis_connections(item)
-                        diccionary_functions[item.text.strip()] = final_flow_steps
+                    if item.shape_type == "start_end" and item.text == "inicio":
+                            final_flow_steps = self.analisis_connections(item)
+                            diccionary_functions[item.text.strip()] = final_flow_steps
 
-                elif item.shape_type == "start_end":
-                        final_flow_steps = self.analisis_connections(item)
-                        diccionary_functions[item.text.strip()] = final_flow_steps
+                    elif item.shape_type == "start_end":
+                            final_flow_steps = self.analisis_connections(item)
+                            diccionary_functions[item.text.strip()] = final_flow_steps
 
-        output_text = "Orden de Ejecución Detectado:\n"
-        for i, function in enumerate(diccionary_functions):
-            keys = list(diccionary_functions.keys())
-            output_text += f"\nNodos de la funcion: {keys[i]}\n"
-            for j, node in enumerate(diccionary_functions[function]):
-                node_text = f"Nodo: {node.text.strip() if node.text.strip() else node.shape_type}"
-                output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type} (dir: {node}) (id: {id(node)}))\n"
+            output_text = "Orden de Ejecución Detectado:\n"
+            for i, function in enumerate(diccionary_functions):
+                keys = list(diccionary_functions.keys())
+                output_text += f"\nNodos de la funcion: {keys[i]}\n"
+                for j, node in enumerate(diccionary_functions[function]):
+                    node_text = f"Nodo: {node.text.strip() if node.text.strip() else node.shape_type}"
+                    output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type} (dir: {node}) (id: {id(node)}))\n"
 
-        self.compilation_output_label.setText(output_text)
+            self.compilation_output_label.setText(output_text)
 
-        diccionary_functions['conn'] = self.scene.connections
+            diccionary_functions['conn'] = self.scene.connections
 
-        parser = Parser(diccionary_functions)
-        codigo_c = parser.generate_code()
+            parser = Parser(diccionary_functions)
+            codigo_c = parser.generate_code()
 
-        print(codigo_c)
+            print(codigo_c)
+        except Exception as e:
+            self.compilation_output_label.setText(f"Error: {str(e)}")
+            QMessageBox.warning(self, "Error de Compilación", str(e))
 
         
