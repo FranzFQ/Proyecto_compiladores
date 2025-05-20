@@ -568,11 +568,10 @@ class AnalizadorSemantico:
         elif isinstance(nodo, NodoFuncion):
             # Registrar la función en la tabla de símbolos
             self.tabla_simbolos.declarar_funcion(nodo.nombre[1], nodo.tipo_retorno[1], nodo.parametros)
-            
+
             # Registrar los parámetros en la tabla de variables
             for param in nodo.parametros:
-                self.tabla_simbolos.declarar_variable(param.nombre[1], param.tipo[1])
-            
+                self.tabla_simbolos.declarar_variable(param.nombre[1], param.tipo[1])            
             # Analizar el cuerpo de la función
             for instruccion in nodo.cuerpo:
                 self.analizar(instruccion)
@@ -592,3 +591,4 @@ class AnalizadorSemantico:
                 raise Exception(f"Error: La variable '{nodo.variable}' no está declarada")
         elif isinstance(nodo, NodoRetorno):
             tipo_expr = self.analizar(nodo.expresion)
+

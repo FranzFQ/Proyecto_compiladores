@@ -1,4 +1,8 @@
 import sys
+from analizador import tokenize
+from main_parser import Parseador
+import subprocess
+
 
 from PyQt6.QtWidgets import ( # type: ignore
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsItem,
@@ -486,14 +490,31 @@ class FlowMainWindow(QMainWindow):
                     node_text = f"Nodo: {node.text.strip() if node.text.strip() else node.shape_type}"
                     output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type} (dir: {node}) (id: {id(node)}))\n"
 
-            self.compilation_output_label.setText(output_text)
 
             diccionary_functions['conn'] = self.scene.connections
 
             parser = Parser(diccionary_functions)
             codigo_c = parser.generate_code()
-
             print(codigo_c)
+            token = tokenize(codigo_c)
+            self.compilation_output_label.setText(codigo_c)
+
+            print("Iniciando análisis sintáctico...")
+            parseador = Parseador(token)
+            arbol_ast = parseador.parsear()
+
+            try:            
+                codigo_asm = arbol_ast.generar_codigo()
+                
+                with open("programa.asm", "w") as archivo:
+                    archivo.write(codigo_asm)
+
+                subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
+                subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
+                subprocess.run(["./programa"])
+            except Exception as e:
+                print(f"Error al generar el código ensamblador: {e}")
+
         except Exception as e:
             self.compilation_output_label.setText(f"Error: {str(e)}")
             QMessageBox.warning(self, "Error de Compilación", str(e))
