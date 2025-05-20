@@ -1,4 +1,7 @@
 import sys
+from analizador import tokenize
+from main_parser import Parseador
+import subprocess
 import uuid
 from collections import deque
 
@@ -721,66 +724,69 @@ class FlowMainWindow(QMainWindow):
              return None
 
         return final_flow_steps
+    
+    def compile_flowchart(self): 
+        try:
+            if not self.scene.start_node:
+                self.compilation_output_label.setText("Error: No se ha definido un nodo de inicio.\n"
+                                                    "Añada una figura 'Inicio/Fin'.")
+                QMessageBox.warning(self, "Error de Compilación", "No se ha definido un nodo de inicio.")
+                return
+            final_flow_steps = []
+            #Diccionario el cual contiene las funciones
+            #Ejamplo de como se guardan: {"Nombre de la funcion": [Nodo1, nodo2, nodo3]}
+            diccionary_functions = {}
+            
+            for item in self.scene.items():
+                if isinstance(item, QGraphicsLineItem):
+                    pass
+                elif isinstance(item, FlowShape):
+                    for function in diccionary_functions:
+                        if item.text.strip() == function: 
+                            QMessageBox.warning(self, "Error de sintaxis", "Se detectaron dos funciones con el mismo nombre")
+                            break
 
-    def compile_flowchart(self):
-        if not self.scene.start_node:
-            self.compilation_output_label.setText("Error: No se ha definido un nodo de inicio.\n"
-                                                 "Añada una figura 'Inicio/Fin'.")
-            QMessageBox.warning(self, "Error de Compilación", "No se ha definido un nodo de inicio.")
-            return
+                    if item.shape_type == "start_end" and item.text == "inicio":
+                            final_flow_steps = self.analisis_connections(item)
+                            diccionary_functions[item.text.strip()] = final_flow_steps
 
-        diccionary_functions = {}
-        all_start_end_nodes = [item for item in self.scene.items() if isinstance(item, FlowShape) and item.shape_type == "start_end"]
+                    elif item.shape_type == "start_end":
+                            final_flow_steps = self.analisis_connections(item)
+                            diccionary_functions[item.text.strip()] = final_flow_steps
 
-        function_names = set()
-        for item in all_start_end_nodes:
-            if item.text.strip():
-                if item.text.strip() in function_names:
-                    QMessageBox.warning(self, "Error de sintaxis", f"Se detectaron dos funciones con el mismo nombre: '{item.text.strip()}'")
-                    self.compilation_output_label.setText(f"Error de sintaxis: Función duplicada '{item.text.strip()}'")
-                    return
-                function_names.add(item.text.strip())
-
-        main_start_node_found = False
-        for item in all_start_end_nodes:
-            if item.text.strip().lower() == "inicio":
-                main_start_node_found = True
-                flow_for_func = self.analisis_connections(item)
-                if flow_for_func is not None:
-                    diccionary_functions[item.text.strip()] = flow_for_func
-                else:
-                    self.compilation_output_label.setText("El nodo 'inicio' no tiene conexiones salientes o no se pudo procesar su flujo.")
-                    return
-                break
-
-        if not main_start_node_found:
-            self.compilation_output_label.setText("Advertencia: No se encontró un nodo 'Inicio'. Se compilarán otras funciones si existen.")
-            pass
-
-        for item in all_start_end_nodes:
-            if item.text.strip() and item.text.strip().lower() != "inicio":
-                flow_for_func = self.analisis_connections(item)
-                if flow_for_func is not None:
-                    diccionary_functions[item.text.strip()] = flow_for_func
-
-
-        output_text = "Orden de Ejecución Detectado:\n"
-        if not diccionary_functions:
-            output_text += "No se detectaron funciones o el nodo 'inicio' no tiene texto 'inicio' y no hay otras funciones definidas.\n"
-        else:
-            for function_name in diccionary_functions:
-                output_text += f"\nNodos de la funcion: '{function_name}'\n"
-                for j, node in enumerate(diccionary_functions[function_name]):
+            output_text = "Orden de Ejecución Detectado:\n"
+            for i, function in enumerate(diccionary_functions):
+                keys = list(diccionary_functions.keys())
+                output_text += f"\nNodos de la funcion: {keys[i]}\n"
+                for j, node in enumerate(diccionary_functions[function]):
                     node_text = f"Nodo: {node.text.strip() if node.text.strip() else node.shape_type}"
-                    output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type})\n"
+                    output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type} (dir: {node}) (id: {id(node)}))\n"
 
-        self.compilation_output_label.setText(output_text)
 
-        parser_data = {'connections': self.scene.connections}
-        parser_data['functions_flow'] = diccionary_functions
+            diccionary_functions['conn'] = self.scene.connections
 
-        parser = Parser(parser_data)
-        codigo_c = parser.generate_code()
+            parser = Parser(diccionary_functions)
+            codigo_c = parser.generate_code()
+            print(codigo_c)
+            token = tokenize(codigo_c)
+            self.compilation_output_label.setText(codigo_c)
 
-        print("\n--- Código C Generado ---")
-        print(codigo_c)
+            print("Iniciando análisis sintáctico...")
+            parseador = Parseador(token)
+            arbol_ast = parseador.parsear()
+
+            try:            
+                codigo_asm = arbol_ast.generar_codigo()
+                
+                with open("programa.asm", "w") as archivo:
+                    archivo.write(codigo_asm)
+
+                subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
+                subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
+                subprocess.run(["./programa"])
+            except Exception as e:
+                print(f"Error al generar el código ensamblador: {e}")
+
+        except Exception as e:
+            self.compilation_output_label.setText(f"Error: {str(e)}")
+            QMessageBox.warning(self, "Error de Compilación", str(e))

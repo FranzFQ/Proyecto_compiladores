@@ -2,7 +2,7 @@ from window import FlowMainWindow
 import sys
 from PyQt6.QtWidgets import QApplication
 import os
-os.environ["QT_QPA_PLATFORM"] = "xcb"
+# os.environ["QT_QPA_PLATFORM"] = "xcb"
 app = QApplication(sys.argv)
 window = FlowMainWindow()
 window.resize(1200, 800)

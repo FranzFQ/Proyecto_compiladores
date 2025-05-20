@@ -4,24 +4,34 @@ from analizador import *
 
 texto = """ 
 
-int main() {
-    int x = 1;
-    int y = 5;
-    int z = 6;
-
-    while (x < 10) {
-        x = x + 1;
+int suma(int a, int b) {
+    int c = a + b;
+    return c;
     }
 
-    print(x);
+int main() {
+    int x = 25;
+    int y = 5;
+    int z;
+    str nombre = "Pablo";
+    
+    print("El nombre es: ");
+    print(nombre);
+
+    z = suma(x, y);
+    print("La suma es: ");
+    print(z);
 
 }
+
+
+
 """
 
 token = tokenize(texto)
 
 # Analizador sintáctico
-class Parser:
+class Parseador:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
@@ -127,11 +137,32 @@ class Parser:
         self.coincidir('DELIMITER') # Final del statement ";"
         return NodoRetorno(expresion)
     
-    def asignacion(self):
-        if self.obtener_token_actual()[0] == "KEYWORD":
+    def asignacion(self): # Debe reconocer: int c = suma(a, b);
+        if self.obtener_token_actual()[0] == "KEYWORD": # int, str, float...
             tipo = self.coincidir("KEYWORD")[1]
         nombre = self.coincidir("IDENTIFIER") # Guarda el nombre de la variable
-        self.coincidir("OPERATOR")
+        # Si hay punto y coma, se considera una declaración de variable
+        if self.obtener_token_actual() and self.obtener_token_actual()[1] == ";":
+            self.coincidir("DELIMITER")
+            return NodoDeclaracionVariable(nombre, tipo)
+        self.coincidir("OPERATOR") # =
+        # Si hay un paréntesis, se considera que la variable está igualada a una función, por lo que debe contener el valor que retorne la función
+        if (self.obtener_token_actual()[0] == 'IDENTIFIER' and self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1][1] == '('):
+            return NodoAsignacion(nombre, self.llamada_funcion())
+        # Si hay comillas, se considera que la variable está igualada a una cadena
+        if self.obtener_token_actual()[0] == "OPERATOR" and self.obtener_token_actual()[1] == '"':
+            # Debe consumirse el token de apertura de comillas y luego almacenarse el contenido de la cadena
+            self.coincidir("OPERATOR") # "
+            cadena = []
+            while self.obtener_token_actual()[1] != '"':
+                palabra = self.coincidir("IDENTIFIER")[1]
+                cadena.append(palabra)
+            self.coincidir("OPERATOR") # "
+            self.coincidir("DELIMITER") # Se espera un ";"
+            return NodoAsignacionCadena(nombre, " ".join(cadena))
+
+            
+        # Si no hay punto y coma, se considera una asignación
         expresion = self.expresion()
         self.coincidir("DELIMITER")
         return NodoAsignacion(nombre, expresion)
@@ -219,7 +250,7 @@ class Parser:
         variable = self.coincidir('IDENTIFIER')
         self.coincidir('DELIMITER') # )
         self.coincidir('DELIMITER') # ;
-        return NodoInput(variable)  # Aquí se guarda la variable en el nodo input
+        return NodoInput(NodoIdentificador(variable, 'None'))  # Aquí se guarda la variable en el nodo input
 
     def sentencia_for(self):
         self.coincidir('KEYWORD')  # for
@@ -306,37 +337,39 @@ def imprimir_ast(nodo):
 
 #  Aquí se prueba
 try:
-    print("Iniciando análisis sintáctico...")
-    parser = Parser(token)
-    arbol_ast = parser.parsear()
-
+    # parseando = Parseador(token)
+    # arbol_ast = parseando.parsear()
     # print(arbol_ast)
-    # analizador_semantico = AnalizadorSemantico()
+
+    # # print(arbol_ast)
+    # # analizador_semantico = AnalizadorSemantico()
     
     
-    # analisis = analizador_semantico.analizar(arbol_ast)
+    # # analisis = analizador_semantico.analizar(arbol_ast)
 
-    # print("Variables")
-    # for llave in (analizador_semantico.tabla_simbolos.variables.keys()):
-    #     valor = analizador_semantico.tabla_simbolos.variables.get(llave)
-    #     print(f"{llave}:{valor}")
+    # # print("Variables")
+    # # for llave in (analizador_semantico.tabla_simbolos.variables.keys()):
+    # #     valor = analizador_semantico.tabla_simbolos.variables.get(llave)
+    # #     print(f"{llave}:{valor}")
 
-    # print("\nFunciones")
-    # for llave in (analizador_semantico.tabla_simbolos.funciones.keys()):
-    #     valor = analizador_semantico.tabla_simbolos.funciones.get(llave)
-    #     print(f"{llave}:{valor}")
+    # # print("\nFunciones")
+    # # for llave in (analizador_semantico.tabla_simbolos.funciones.keys()):
+    # #     valor = analizador_semantico.tabla_simbolos.funciones.get(llave)
+    # #     print(f"{llave}:{valor}")
 
     
-    codigo_asm = arbol_ast.generar_codigo()
-    with open("programa.asm", "w") as archivo:
-        archivo.write(codigo_asm)
+    # codigo_asm = arbol_ast.generar_codigo()
+    # with open("programa.asm", "w") as archivo:
+    #     archivo.write(codigo_asm)
 
-    subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
-    subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
-    subprocess.run(["./programa"])
+    # subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
+    # subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
+    # subprocess.run(["./programa"])
 
-    # print('Análisis sintáctico exitoso')
-    # print(json.dumps(imprimir_ast(arbol_ast), indent=1))
+    # # print('Análisis sintáctico exitoso')
+    # # print(json.dumps(imprimir_ast(arbol_ast), indent=1))
+    pass
+
 
 except SyntaxError as e:
     print(e)
