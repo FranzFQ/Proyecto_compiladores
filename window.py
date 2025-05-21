@@ -521,7 +521,7 @@ class FlowMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Editor de Diagramas de Flujo")
-        self.setStyleSheet("background-color: gray")
+        self.setStyleSheet("background-color: #CEE9F5")
 
         self.scene = FlowScene()
         self.view = QGraphicsView(self.scene)
