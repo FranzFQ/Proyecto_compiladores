@@ -514,59 +514,7 @@ class FlowScene(QGraphicsScene):
         print(codigo_c)
 
 
-class WslTerminalWidget(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        layout = QVBoxLayout(self)
-        self.setLayout(layout)
-
-        self.output_area = QTextEdit()
-        self.output_area.setReadOnly(True)
-        self.output_area.setStyleSheet("background-color: black; color: green; font-family: 'Consolas', 'DejaVu Sans Mono', monospace;")
-        layout.addWidget(self.output_area)
-
-        self.input_line = QLineEdit()
-        self.input_line.setPlaceholderText("Escribe un comando y presiona Enter (ej: ls -la, pwd, echo 'Hola WSL')")
-        self.input_line.setStyleSheet("background-color: black; color: white;")
-        layout.addWidget(self.input_line)
-
-        self.process = QProcess(self)
-        self.process.readyReadStandardOutput.connect(self.read_stdout)
-        self.process.readyReadStandardError.connect(self.read_stderr)
-        self.process.finished.connect(self.handle_finished)
-
-        self.input_line.returnPressed.connect(self.send_command)
-
-        try:
-            self.process.start("wsl.exe")
-            self.output_area.append("--- Iniciando Terminal WSL/Ubuntu ---")
-        except Exception as e:
-            self.output_area.append(f"ERROR: No se pudo iniciar WSL. Asegúrate de que 'wsl.exe' esté en tu PATH y WSL esté instalado. {e}")
-            self.input_line.setEnabled(False)
-
-    def read_stdout(self):
-        data_bytes = self.process.readAllStandardOutput().data()
-        data_str = data_bytes.decode('utf-8', errors='ignore')
-        self.output_area.append(data_str.strip())
-        self.output_area.verticalScrollBar().setValue(self.output_area.verticalScrollBar().maximum())
-
-    def read_stderr(self):
-        data_bytes = self.process.readAllStandardError().data()
-        data_str = data_bytes.decode('utf-8', errors='ignore')
-        self.output_area.append(f"<span style='color:red;'>ERROR: {data_str.strip()}</span>")
-        self.output_area.verticalScrollBar().setValue(self.output_area.verticalScrollBar().maximum())
-
-    def send_command(self):
-        command = self.input_line.text()
-        if command:
-            self.output_area.append(f"<span style='color:lightblue;'>$ {command}</span>")
-            self.process.write((command + '\n').encode('utf-8'))
-            self.input_line.clear()
-
-    def handle_finished(self, exitCode, exitStatus):
-        self.output_area.append(f"--- Terminal WSL terminada con código {exitCode} y estado {exitStatus} ---")
-        self.input_line.setEnabled(False)
+    
 
 
 class FlowMainWindow(QMainWindow):
@@ -628,7 +576,7 @@ class FlowMainWindow(QMainWindow):
         self.compilation_output_label.setWordWrap(True)
         compilation_layout.addWidget(self.compilation_output_label)
 
-        button_compile = QPushButton("Compilar")
+        button_compile = QPushButton("Generar código")
         button_compile.setStyleSheet("background-color: white")
         button_compile.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         button_compile.clicked.connect(self.compile_flowchart)
@@ -767,6 +715,9 @@ class FlowMainWindow(QMainWindow):
 
             parser = Parser(diccionary_functions)
             codigo_c = parser.generate_code()
+
+            
+
             print(codigo_c)
             token = tokenize(codigo_c)
             self.compilation_output_label.setText(codigo_c)
@@ -778,15 +729,115 @@ class FlowMainWindow(QMainWindow):
             try:            
                 codigo_asm = arbol_ast.generar_codigo()
                 
+                # Aquí se guardará el código ensamblador en un archivo
                 with open("programa.asm", "w") as archivo:
                     archivo.write(codigo_asm)
 
-                subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
-                subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
-                subprocess.run(["./programa"])
+
+                # Ahora el codigo se ejecutará en la otra terminal de WSL al presionar los botones
+                # subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
+                # subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
+                # subprocess.run(["./programa"])
             except Exception as e:
                 print(f"Error al generar el código ensamblador: {e}")
 
         except Exception as e:
             self.compilation_output_label.setText(f"Error: {str(e)}")
             QMessageBox.warning(self, "Error de Compilación", str(e))
+
+class WslTerminalWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        # Área de salida
+        self.output_area = QTextEdit()
+        self.output_area.setReadOnly(True)
+        self.output_area.setStyleSheet("background-color: black; color: green; font-family: 'Consolas', 'DejaVu Sans Mono', monospace;")
+        layout.addWidget(self.output_area)
+
+        # Botones para ensamblador
+        asm_buttons_layout = QHBoxLayout()
+        
+        self.compile_button = QPushButton("Compilar (NASM)")
+        self.compile_button.setStyleSheet("background-color: #333; color: white;")
+        self.compile_button.clicked.connect(self.compile_asm)
+        asm_buttons_layout.addWidget(self.compile_button)
+        
+        self.link_button = QPushButton("Enlazar (LD)")
+        self.link_button.setStyleSheet("background-color: #333; color: white;")
+        self.link_button.clicked.connect(self.link_asm)
+        asm_buttons_layout.addWidget(self.link_button)
+        
+        self.run_button = QPushButton("Ejecutar programa")
+        self.run_button.setStyleSheet("background-color: #333; color: white;")
+        self.run_button.clicked.connect(self.run_program)
+        asm_buttons_layout.addWidget(self.run_button)
+        
+        layout.addLayout(asm_buttons_layout)
+
+        # Línea de entrada para comandos tradicionales
+        self.input_line = QLineEdit()
+        self.input_line.setPlaceholderText("O escribe un comando WSL tradicional y presiona Enter")
+        self.input_line.setStyleSheet("background-color: black; color: white;")
+        layout.addWidget(self.input_line)
+
+        # Proceso WSL
+        self.process = QProcess(self)
+        self.process.readyReadStandardOutput.connect(self.read_stdout)
+        self.process.readyReadStandardError.connect(self.read_stderr)
+        self.process.finished.connect(self.handle_finished)
+
+        self.input_line.returnPressed.connect(self.send_command)
+
+        try:
+            self.process.start("wsl.exe")
+            self.output_area.append("--- Iniciando Terminal WSL/Ubuntu ---")
+            self.output_area.append("Usa los botones para compilar y ejecutar código ensamblador")
+        except Exception as e:
+            self.output_area.append(f"ERROR: No se pudo iniciar WSL. Asegúrate de que 'wsl.exe' esté en tu PATH y WSL esté instalado. {e}")
+            self.input_line.setEnabled(False)
+            for btn in [self.compile_button, self.link_button, self.run_button]:
+                btn.setEnabled(False)
+
+    def compile_asm(self):
+        self.output_area.append("> Compilando programa.asm con NASM...")
+        command = "nasm -f elf32 programa.asm -o programa.o"
+        self.process.write((command + '\n').encode('utf-8'))
+
+    def link_asm(self):
+        self.output_area.append("> Enlazando programa.o con LD...")
+        command = "ld -m elf_i386 -o programa programa.o"
+        self.process.write((command + '\n').encode('utf-8'))
+
+    def run_program(self):
+        self.output_area.append("> Ejecutando programa...")
+        command = "./programa"
+        self.process.write((command + '\n').encode('utf-8'))
+
+    def read_stdout(self):
+        data_bytes = self.process.readAllStandardOutput().data()
+        data_str = data_bytes.decode('utf-8', errors='ignore')
+        self.output_area.append(data_str.strip())
+        self.output_area.verticalScrollBar().setValue(self.output_area.verticalScrollBar().maximum())
+
+    def read_stderr(self):
+        data_bytes = self.process.readAllStandardError().data()
+        data_str = data_bytes.decode('utf-8', errors='ignore')
+        self.output_area.append(f"<span style='color:red;'>ERROR: {data_str.strip()}</span>")
+        self.output_area.verticalScrollBar().setValue(self.output_area.verticalScrollBar().maximum())
+
+    def send_command(self):
+        command = self.input_line.text()
+        if command:
+            self.output_area.append(f"<span style='color:lightblue;'>$ {command}</span>")
+            self.process.write((command + '\n').encode('utf-8'))
+            self.input_line.clear()
+
+    def handle_finished(self, exitCode, exitStatus):
+        self.output_area.append(f"--- Terminal WSL terminada con código {exitCode} y estado {exitStatus} ---")
+        self.input_line.setEnabled(False)
+        for btn in [self.compile_button, self.link_button, self.run_button]:
+            btn.setEnabled(False)

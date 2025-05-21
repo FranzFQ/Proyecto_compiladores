@@ -339,23 +339,23 @@ def imprimir_ast(nodo):
 try:
     # parseando = Parseador(token)
     # arbol_ast = parseando.parsear()
-    # print(arbol_ast)
-
     # # print(arbol_ast)
-    # # analizador_semantico = AnalizadorSemantico()
+
+    # # # print(arbol_ast)
+    # # # analizador_semantico = AnalizadorSemantico()
     
     
-    # # analisis = analizador_semantico.analizar(arbol_ast)
+    # # # analisis = analizador_semantico.analizar(arbol_ast)
 
-    # # print("Variables")
-    # # for llave in (analizador_semantico.tabla_simbolos.variables.keys()):
-    # #     valor = analizador_semantico.tabla_simbolos.variables.get(llave)
-    # #     print(f"{llave}:{valor}")
+    # # # print("Variables")
+    # # # for llave in (analizador_semantico.tabla_simbolos.variables.keys()):
+    # # #     valor = analizador_semantico.tabla_simbolos.variables.get(llave)
+    # # #     print(f"{llave}:{valor}")
 
-    # # print("\nFunciones")
-    # # for llave in (analizador_semantico.tabla_simbolos.funciones.keys()):
-    # #     valor = analizador_semantico.tabla_simbolos.funciones.get(llave)
-    # #     print(f"{llave}:{valor}")
+    # # # print("\nFunciones")
+    # # # for llave in (analizador_semantico.tabla_simbolos.funciones.keys()):
+    # # #     valor = analizador_semantico.tabla_simbolos.funciones.get(llave)
+    # # #     print(f"{llave}:{valor}")
 
     
     # codigo_asm = arbol_ast.generar_codigo()

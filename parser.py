@@ -102,7 +102,9 @@ class Parser:
                   expecting=expecting, visited=visited)} 
                 }}"""
             elif node.text == 'end':
-               return "return 0;"
+               return ""
+            elif node.text == 'end_function':
+               return f"return 0;"
             else:
                return f"""
                int {node.text} 
@@ -112,30 +114,34 @@ class Parser:
                }}"""
          elif node.shape_type == 'process':
               if is_last:
-                return f"""{node.text};"""
-              return f"""{node.text}; 
+                return f"""{node.text}"""
+              return f"""{node.text} 
               {self.parse(name, str(id(edges[0])), looping, 
               convergence=convergence, expecting=expecting, visited=visited)}"""
 
          elif node.shape_type == 'input_output':
-              frac = node.text.split(' ', 1)
-              if len(frac) != 2:
-                  raise ValueError("Invalid input/output format")
-              else:
-                  if frac[0] == 'write':
+            frac = node.text.split(' ', 1)
+            if len(frac) != 2:
+                raise ValueError("Invalid input/output format")
+            else:
+                if frac[0] == 'write':
                     if is_last:
-                      return f"""print({frac[1]});"""
+                        return f"""print({frac[1]});"""
                     return f"""print({frac[1]});
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
-                  elif frac[0] == 'read':
+                elif frac[0] == 'read':
                     if is_last:
-                      return f"""input({frac[1]});"""
-                    code += f"""input({frac[1]});
+                        return f"""input({frac[1]});"""
+                    code = f"""input({frac[1]});
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
-                  else:
+                    return code  # Asegúrate de retornar 'code'
+                else:
                     raise ValueError("Invalid input/output format")
+
+
+
          elif node.shape_type == 'decision' and looping:
             expecting.append(current_id)
             return f"""while ({node.text}) {{
