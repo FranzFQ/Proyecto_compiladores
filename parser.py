@@ -23,6 +23,7 @@ func_node(att):
 '''
 from collections import defaultdict, deque
 import copy
+import re
 
 class Parser:
   def __init__(self, flow_graph: dict):
@@ -102,22 +103,30 @@ class Parser:
                   expecting=expecting, visited=visited)} 
                 }}"""
             elif node.text == 'end':
-               return ""
+               return "return 0;"
             elif node.text == 'end_function':
-               return f"return 0;"
+               return ""
             else:
                return f"""
-               int {node.text} 
+               {self.format_function_init(node.text)} 
                {{ 
                  {self.parse(name, str(id(edges[0])), 
                   looping, convergence=convergence, expecting=expecting, visited=visited)} 
                }}"""
+
          elif node.shape_type == 'process':
+              code = ""
+              inst_list = node.text.split("\n")
+              
               if is_last:
-                return f"""{node.text}"""
-              return f"""{node.text} 
-              {self.parse(name, str(id(edges[0])), looping, 
-              convergence=convergence, expecting=expecting, visited=visited)}"""
+                for inst in inst_list:
+                   code += f"{inst};\n"
+                   return code
+
+              for inst in inst_list:
+                code += f"{inst};\n"
+              code += f"""{self.parse(name, str(id(edges[0])), looping, convergence=convergence, expecting=expecting, visited=visited)}"""
+              return code
 
          elif node.shape_type == 'input_output':
             frac = node.text.split(' ', 1)
@@ -132,15 +141,13 @@ class Parser:
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
                 elif frac[0] == 'read':
                     if is_last:
-                        return f"""input({frac[1]});"""
-                    code = f"""input({frac[1]});
+
+                      return f"""{frac[1]} = input();"""
+                    return f"""{frac[1]} = input();
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
-                    return code  # Asegúrate de retornar 'code'
                 else:
                     raise ValueError("Invalid input/output format")
-
-
 
          elif node.shape_type == 'decision' and looping:
             expecting.append(current_id)
@@ -175,8 +182,7 @@ class Parser:
                               convergence=convergence, expecting=expecting, visited=visited)}
                 }}"""
       return ""
-               
-           
+                     
   def verify_loop(self, current_id: str) -> bool:
       found = False
       for key, value in self.current_graph.items():
@@ -291,9 +297,7 @@ class Parser:
             subgraphs[first_node_payload_text] = subgraph
     
     self.ind_functions = subgraphs
-    
-    
-
+   
   def remove_connectors(self):
      conn_list = []
      current = self.flow_graph['conn'].head
@@ -315,3 +319,9 @@ class Parser:
         conn_list.remove(conn_to)
 
      self.flow_graph['conn'] = conn_list
+
+  def format_function_init(self, _input: str) -> str:
+    stripped = _input.strip()  
+    if re.search(r'\w+\s*\(', stripped):
+        return stripped
+    return stripped + "()"
