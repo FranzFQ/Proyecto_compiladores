@@ -102,9 +102,7 @@ class Parser:
                   looping, convergence=convergence, 
                   expecting=expecting, visited=visited)} 
                 }}"""
-            elif node.text == 'end':
-               return "return 0;"
-            elif node.text == 'end_function':
+            elif node.text == 'end' or node.text == 'end_function':
                return ""
             else:
                return f"""
@@ -148,6 +146,10 @@ class Parser:
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
                 else:
                     raise ValueError("Invalid input/output format")
+                
+         elif node.shape_type == 'function_call':
+            return f"""{node.text};
+            {self.parse(name, str(id(edges[0])), looping, convergence, expecting, visited)}"""
 
          elif node.shape_type == 'decision' and looping:
             expecting.append(current_id)
