@@ -129,24 +129,26 @@ class Parser:
               return code
 
          elif node.shape_type == 'input_output':
-              frac = node.text.split(' ', 1)
-              if len(frac) != 2:
-                  raise ValueError("Invalid input/output format")
-              else:
-                  if frac[0] == 'write':
+            frac = node.text.split(' ', 1)
+            if len(frac) != 2:
+                raise ValueError("Invalid input/output format")
+            else:
+                if frac[0] == 'write':
                     if is_last:
-                      return f"""print({frac[1]});"""
+                        return f"""print({frac[1]});"""
                     return f"""print({frac[1]});
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
-                  elif frac[0] == 'read':
+                elif frac[0] == 'read':
                     if is_last:
+
                       return f"""{frac[1]} = input();"""
                     return f"""{frac[1]} = input();
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
-                  else:
+                else:
                     raise ValueError("Invalid input/output format")
+
          elif node.shape_type == 'decision' and looping:
             expecting.append(current_id)
             return f"""while ({node.text}) {{
@@ -180,8 +182,7 @@ class Parser:
                               convergence=convergence, expecting=expecting, visited=visited)}
                 }}"""
       return ""
-               
-           
+                     
   def verify_loop(self, current_id: str) -> bool:
       found = False
       for key, value in self.current_graph.items():
@@ -296,9 +297,7 @@ class Parser:
             subgraphs[first_node_payload_text] = subgraph
     
     self.ind_functions = subgraphs
-    
-    
-
+   
   def remove_connectors(self):
      conn_list = []
      current = self.flow_graph['conn'].head
@@ -326,4 +325,3 @@ class Parser:
     if re.search(r'\w+\s*\(', stripped):
         return stripped
     return stripped + "()"
-
