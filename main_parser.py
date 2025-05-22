@@ -5,16 +5,13 @@ from analizador import *
 texto = """
 
 int main() {
-int a;
-input(a);
-if (a < 5) {
+int a = 6;
+if (a > 5) {
+print("hola mundo", a, "hola mundo2");
 
-print("hola mundo probando el parser");
 
 } else {
-
-print("holamundo2");
-
+print("adios mundo", a, "adios mundo2");
 }
 }
 
@@ -214,27 +211,52 @@ class Parseador:
     def sentencia_print(self):
         self.coincidir('KEYWORD')  # print
         self.coincidir('DELIMITER')  # (
-        es_cadena = False
+        lista_prints = []
         # Verificar si es un identificador o una cadena
-        if self.obtener_token_actual()[0] == "IDENTIFIER":
-            variable = self.coincidir('IDENTIFIER')
-        # Verificar si es el inicio de una cadena mediante comillas
-        elif self.obtener_token_actual()[0] == "OPERATOR" and self.obtener_token_actual()[1] == '"':
-            es_cadena = True
-            self.coincidir('OPERATOR')  # "
-            cadena = []
-            while self.obtener_token_actual()[1] != '"':
-                if self.obtener_token_actual()[0] == "IDENTIFIER":
-                    palabra = self.coincidir('IDENTIFIER')[1]
-                elif self.obtener_token_actual()[0] == "NUMBER":
-                    palabra = self.coincidir('NUMBER')[1]
-                cadena.append(palabra) # Se guardan los caracteres de la cadena
-            self.coincidir('OPERATOR') # "
-            variable = " ".join(cadena)
-        self.coincidir('DELIMITER')  # )
+        while True:
+            es_cadena = False
+            contador = 0
+            if self.obtener_token_actual()[0] == "IDENTIFIER":
+                variable = self.coincidir('IDENTIFIER')
+            # Verificar si es el inicio de una cadena mediante comillas
+            elif self.obtener_token_actual()[0] == "OPERATOR" and self.obtener_token_actual()[1] == '"':
+                es_cadena = True
+                self.coincidir('OPERATOR')  # "
+                cadena = []
+
+                while self.obtener_token_actual()[1] != '"':
+                    if self.obtener_token_actual()[0] == "IDENTIFIER":
+                        palabra = self.coincidir('IDENTIFIER')[1]
+                    elif self.obtener_token_actual()[0] == "NUMBER":
+                        palabra = self.coincidir('NUMBER')[1]
+                    cadena.append(palabra) # Se guardan los caracteres de la cadena
+                self.coincidir('OPERATOR') # "
+                variable = " ".join(cadena)
+    
+            # print("hola mundo", a, "hola mundo2");
+            if self.obtener_token_actual() and (self.obtener_token_actual()[1] == ',' or self.obtener_token_actual()[1] == ')') and es_cadena and self.tokens[self.pos + 1][1] != ';': # Verificar que el siguiente token sea una coma
+                self.coincidir('DELIMITER') # ,
+                contador += 1
+                lista_prints.append(NodoPrint(NodoCadena(variable)))
+            elif self.obtener_token_actual() and (self.obtener_token_actual()[1] == ',' or self.obtener_token_actual()[1] == ")") and not es_cadena and self.tokens[self.pos + 1][1] != ';':
+                self.coincidir('DELIMITER') # ,
+                contador += 1
+                lista_prints.append(NodoPrint(NodoIdentificador(variable, 'int')))
+            else:
+                if es_cadena:
+                    lista_prints.append(NodoPrint(NodoCadena(variable)))
+
+                else:
+                    lista_prints.append(NodoPrint(NodoIdentificador(variable, 'int')))
+                self.coincidir('DELIMITER')
+                break
+            continue
+
+        
         self.coincidir('DELIMITER')  # ;
+        if len(lista_prints) > 0:
+            return NodoPrintList(lista_prints)
         if es_cadena:
-            print("es cadena")
             return NodoPrint(NodoCadena(variable))
         else:
             return NodoPrint(NodoIdentificador(variable, 'int'))  # Aquí se guarda la variable en el nodo print
@@ -353,13 +375,13 @@ try:
     # # #     print(f"{llave}:{valor}")
 
 
-    # codigo_asm = arbol_ast.generar_codigo()
-    # with open("programa.asm", "w") as archivo:
-    #     archivo.write(codigo_asm)
+    codigo_asm = arbol_ast.generar_codigo()
+    with open("programa.asm", "w") as archivo:
+        archivo.write(codigo_asm)
 
-    # subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
-    # subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
-    # subprocess.run(["./programa"])
+    subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
+    subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
+    subprocess.run(["./programa"])
 
     # # print('Análisis sintáctico exitoso')
     # # print(json.dumps(imprimir_ast(arbol_ast), indent=1))
