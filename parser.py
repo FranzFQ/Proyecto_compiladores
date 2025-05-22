@@ -22,6 +22,7 @@ func_node(att):
 
 '''
 from collections import defaultdict, deque
+import subprocess
 import copy
 import re
 
@@ -51,6 +52,8 @@ class Parser:
             codegen += value + "\n"
       
       codegen += main_code + "\n"
+
+      codegen = format_c_code(codegen)
 
       return codegen
           
@@ -137,13 +140,19 @@ class Parser:
                     return f"""print({frac[1]});
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
-                elif frac[0] == 'read':
+                elif frac[0] == 'readStr':
                     if is_last:
-
-                      return f"""input({frac[1]});"""
-                    return f"""input({frac[1]});
+                      return f"""inputStr({frac[1]});"""
+                    return f"""inputStr({frac[1]});
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
+                elif frac[0] == 'readNum':
+                    if is_last:
+                      return f"""inputNum({frac[1]});"""
+                    return f"""inputNum({frac[1]});
+                    {self.parse(name, str(id(edges[0])), looping, 
+                                convergence=convergence, expecting=expecting, visited=visited)}"""
+                
                 else:
                     raise ValueError("Invalid input/output format")
                 
@@ -327,3 +336,19 @@ class Parser:
     if re.search(r'\w+\s*\(', stripped):
         return stripped
     return stripped + "()"
+
+def format_c_code(code: str) -> str:
+    process = subprocess.Popen(
+        ['clang-format'],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    formatted_code, err = process.communicate(input=code)
+    
+    if process.returncode != 0:
+        raise RuntimeError(f"clang-format failed: {err}")
+    
+    return formatted_code
+  
