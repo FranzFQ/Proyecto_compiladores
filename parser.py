@@ -142,8 +142,8 @@ class Parser:
                 elif frac[0] == 'read':
                     if is_last:
 
-                      return f"""{frac[1]} = input();"""
-                    return f"""{frac[1]} = input();
+                      return f"""input({frac[1]});"""
+                    return f"""input({frac[1]});
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
                 else:
