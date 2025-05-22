@@ -2,29 +2,21 @@ import json
 import subprocess
 from analizador import *
 
-texto = """ 
-
-int suma(int a, int b) {
-    int c = a + b;
-    return c;
-    }
+texto = """
 
 int main() {
-    int x = 25;
-    int y = 5;
-    int z;
-    str nombre = "Pablo";
-    
-    print("El nombre es: ");
-    print(nombre);
+int a;
+input(a);
+if (a < 5) {
 
-    z = suma(x, y);
-    print("La suma es: ");
-    print(z);
+print("hola mundo probando el parser");
+
+} else {
+
+print("holamundo2");
 
 }
-
-
+}
 
 """
 
@@ -50,7 +42,7 @@ class Parseador:
     def parsear(self):
         # Punto de entrada del analizador: se espera una función
         return self.programa()
-    
+
     def programa(self):
         funciones = []
         hay_main = False
@@ -136,7 +128,7 @@ class Parseador:
         expresion = self.expresion()
         self.coincidir('DELIMITER') # Final del statement ";"
         return NodoRetorno(expresion)
-    
+
     def asignacion(self): # Debe reconocer: int c = suma(a, b);
         if self.obtener_token_actual()[0] == "KEYWORD": # int, str, float...
             tipo = self.coincidir("KEYWORD")[1]
@@ -161,7 +153,7 @@ class Parseador:
             self.coincidir("DELIMITER") # Se espera un ";"
             return NodoAsignacionCadena(nombre, " ".join(cadena))
 
-            
+
         # Si no hay punto y coma, se considera una asignación
         expresion = self.expresion()
         self.coincidir("DELIMITER")
@@ -207,7 +199,7 @@ class Parseador:
             self.coincidir('DELIMITER') # }
             return NodoIf(condicion, cuerpo, sino)
         return NodoIf(condicion, cuerpo)
-    
+
     def sentencia_while(self):
         self.coincidir('KEYWORD')  # while
         self.coincidir('DELIMITER')  # (
@@ -232,18 +224,21 @@ class Parseador:
             self.coincidir('OPERATOR')  # "
             cadena = []
             while self.obtener_token_actual()[1] != '"':
-                palabra = self.coincidir('IDENTIFIER')[1]
-                # print(caracter)
+                if self.obtener_token_actual()[0] == "IDENTIFIER":
+                    palabra = self.coincidir('IDENTIFIER')[1]
+                elif self.obtener_token_actual()[0] == "NUMBER":
+                    palabra = self.coincidir('NUMBER')[1]
                 cadena.append(palabra) # Se guardan los caracteres de la cadena
             self.coincidir('OPERATOR') # "
-            variable = " ".join(cadena) 
+            variable = " ".join(cadena)
         self.coincidir('DELIMITER')  # )
         self.coincidir('DELIMITER')  # ;
         if es_cadena:
+            print("es cadena")
             return NodoPrint(NodoCadena(variable))
         else:
             return NodoPrint(NodoIdentificador(variable, 'int'))  # Aquí se guarda la variable en el nodo print
-        
+
     def sentencia_input(self):
         self.coincidir('KEYWORD') # input
         self.coincidir('DELIMITER') # (
@@ -255,7 +250,7 @@ class Parseador:
     def sentencia_for(self):
         self.coincidir('KEYWORD')  # for
         self.coincidir('DELIMITER')  # (
-        
+
         # Inicialización (ej: i = 0)
         if self.obtener_token_actual()[0] == "KEYWORD":
             self.coincidir("KEYWORD")  # tipo (int, etc.)
@@ -263,26 +258,26 @@ class Parseador:
         self.coincidir('OPERATOR')  # =
         valor_inicial = self.expresion()
         self.coincidir('DELIMITER')  # ;
-        
+
         inicializacion = NodoAsignacion(identificador, valor_inicial)
-        
+
         # Condición (ej: i < 10)
         condicion = self.expresion()
         self.coincidir('DELIMITER')  # ;
-        
+
         # Actualización (ej: i = i + 1)
         var_actualizacion = self.coincidir('IDENTIFIER')
         self.coincidir('OPERATOR')  # =
         expr_actualizacion = self.expresion()
         self.coincidir('DELIMITER')  # )
-        
+
         actualizacion = NodoAsignacion(var_actualizacion, expr_actualizacion)
-        
+
         # Cuerpo del for
         self.coincidir('DELIMITER')  # {
         cuerpo = self.cuerpo()
         self.coincidir('DELIMITER')  # }
-        
+
         return NodoFor(inicializacion, condicion, actualizacion, cuerpo)
 
 
@@ -337,14 +332,14 @@ def imprimir_ast(nodo):
 
 #  Aquí se prueba
 try:
-    # parseando = Parseador(token)
-    # arbol_ast = parseando.parsear()
+    parseando = Parseador(token)
+    arbol_ast = parseando.parsear()
     # # print(arbol_ast)
 
     # # # print(arbol_ast)
     # # # analizador_semantico = AnalizadorSemantico()
-    
-    
+
+
     # # # analisis = analizador_semantico.analizar(arbol_ast)
 
     # # # print("Variables")
@@ -357,7 +352,7 @@ try:
     # # #     valor = analizador_semantico.tabla_simbolos.funciones.get(llave)
     # # #     print(f"{llave}:{valor}")
 
-    
+
     # codigo_asm = arbol_ast.generar_codigo()
     # with open("programa.asm", "w") as archivo:
     #     archivo.write(codigo_asm)

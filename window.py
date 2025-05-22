@@ -775,13 +775,20 @@ class WslTerminalWidget(QWidget):
         self.run_button.setStyleSheet("background-color: #333; color: white;")
         self.run_button.clicked.connect(self.run_program)
         asm_buttons_layout.addWidget(self.run_button)
+
+        # Botón para limpiar la salida
+        self.clear_button = QPushButton("Limpiar salida")
+        self.clear_button.setStyleSheet("background-color: #333; color: white;")
+        self.clear_button.clicked.connect(lambda: self.output_area.clear())
+        asm_buttons_layout.addWidget(self.clear_button)
+
         
         layout.addLayout(asm_buttons_layout)
 
         # Línea de entrada para comandos tradicionales
         self.input_line = QLineEdit()
-        self.input_line.setPlaceholderText("O escribe un comando WSL tradicional y presiona Enter")
-        self.input_line.setStyleSheet("background-color: black; color: white;")
+        self.input_line.setPlaceholderText("Ingresa lo solicitado...")
+        self.input_line.setStyleSheet("background-color: white; color: gray;")
         layout.addWidget(self.input_line)
 
         # Proceso WSL
@@ -789,6 +796,8 @@ class WslTerminalWidget(QWidget):
         self.process.readyReadStandardOutput.connect(self.read_stdout)
         self.process.readyReadStandardError.connect(self.read_stderr)
         self.process.finished.connect(self.handle_finished)
+        # Cambiar color
+        self.output_area.setStyleSheet("background-color: black; color: green; font-family: 'Consolas', 'DejaVu Sans Mono', monospace;")
 
         self.input_line.returnPressed.connect(self.send_command)
 

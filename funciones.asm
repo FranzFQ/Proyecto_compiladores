@@ -55,6 +55,37 @@ input:
     ret
 
 
+atoi:
+    push ebx
+    push ecx
+    push edx
+
+    xor ebx, ebx      ; EBX = resultado = 0
+
+.next_char:
+    mov cl, [eax]     ; cargar siguiente carácter en CL
+    cmp cl, 0         ; fin de cadena?
+    je .done
+
+    sub cl, '0'       ; convertir ASCII a valor numérico
+    cmp cl, 9
+    ja .done          ; si no es dígito, salir (seguridad básica)
+
+    movzx edx, cl     ; mover dígito a EDX (zero extend)
+    imul ebx, ebx, 10 ; resultado *= 10
+    add ebx, edx      ; resultado += dígito
+
+    inc eax           ; avanzar al siguiente carácter
+    jmp .next_char
+
+.done:
+    mov eax, ebx      ; poner resultado en EAX
+
+    pop edx
+    pop ecx
+    pop ebx
+    ret
+
 
 
 ; --------------------- funcion de salida --------------------

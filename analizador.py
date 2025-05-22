@@ -521,6 +521,7 @@ class AnalizadorSemantico:
                 nombre_cadena = f"cadena_{self.contador_cadenas}"
                 self.contador_cadenas += 1
                 self.tabla_simbolos.declarar_cadena(nombre_cadena, nodo.variable.valor)
+                print(f"Cadena '{nombre_cadena}' agregada a la tabla de símbolos")
                 nodo.variable = NodoIdentificador(('IDENTIFIER', nombre_cadena), 'str')  # Reemplazar la cadena por su nombre
             elif isinstance(nodo.variable, NodoIdentificador):
                 # Verificar si la variable existe
@@ -575,6 +576,27 @@ class AnalizadorSemantico:
             # Analizar el cuerpo de la función
             for instruccion in nodo.cuerpo:
                 self.analizar(instruccion)
+        elif isinstance(nodo, NodoIf):
+            # Analizar la condición
+            tipo_condicion = self.analizar(nodo.condicion)
+            if tipo_condicion != 'int':
+                raise Exception(f"Error: Tipo de condición no válida en if (esperado 'int', recibido '{tipo_condicion}')")
+            # Analizar el cuerpo del if
+            for instruccion in nodo.cuerpo:
+                self.analizar(instruccion)
+            # Analizar el cuerpo del else (si existe)
+            if nodo.sino:
+                for instruccion in nodo.sino:
+                    self.analizar(instruccion)
+        elif isinstance(nodo, NodoWhile):
+            # Analizar la condición
+            tipo_condicion = self.analizar(nodo.condicion)
+            if tipo_condicion != 'int':
+                raise Exception(f"Error: Tipo de condición no válida en while (esperado 'int', recibido '{tipo_condicion}')")
+            # Analizar el cuerpo del while
+            for instruccion in nodo.cuerpo:
+                self.analizar(instruccion)
+                
         elif isinstance(nodo, NodoLlamadaFuncion):
             tipo_retorno, parametros = self.tabla_simbolos.obtener_info_funcion(nodo.nombre[1])
             if len(nodo.argumentos) != len(parametros):
