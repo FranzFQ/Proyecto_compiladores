@@ -4,11 +4,12 @@ from main_parser import Parseador
 import subprocess
 import uuid
 from collections import deque
+import math
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsItem,
     QGraphicsLineItem, QToolBar, QVBoxLayout, QWidget, QInputDialog, QLineEdit,
-    QMessageBox, QHBoxLayout, QLabel, QSizePolicy, QPushButton, QTextEdit
+    QMessageBox, QHBoxLayout, QLabel, QSizePolicy, QPushButton, QTextEdit, QGraphicsPolygonItem
 )
 from PyQt6.QtGui import (
     QPolygonF, QPen, QColor, QAction, QPainter, QCursor, QTextOption, QFontMetrics, QFont
@@ -40,6 +41,10 @@ class ConnectionList:
     def __init__(self):
         self.head = None
 
+class ConnectionList:
+    def __init__(self):
+        self.head = None
+
     def add_connection(self, from_item, to_item, line_item):
         new_node = ConnectionNode(from_item, to_item, line_item)
         if not self.head:
@@ -49,6 +54,37 @@ class ConnectionList:
             while current.next:
                 current = current.next
             current.next = new_node
+
+    def create_connection(self, from_item, to_item, scene):
+        # Validar conexiones para objetos de decisión
+        if from_item.shape_type == 'decision' and to_item.shape_type == 'decision':
+            QMessageBox.warning(None, "Error", "No se puede conectar dos decisiones directamente")
+            return None
+
+        # Obtener puntos de conexión específicos
+        start_pos = from_item.get_connection_point(to_item.center(), is_input=False)
+        end_pos = to_item.get_connection_point(from_item.center(), is_input=True)
+
+        # Crear la línea
+        line = QGraphicsLineItem(QLineF(start_pos, end_pos))
+        line.setPen(QPen(Qt.GlobalColor.black, 2))
+        scene.addItem(line)
+
+        # Crear flecha
+        arrow_size = 10
+        angle = math.atan2(end_pos.y() - start_pos.y(), end_pos.x() - start_pos.x())
+        
+        arrow_p1 = end_pos - QPointF(math.cos(angle - math.pi/6) * arrow_size,
+                                    math.sin(angle - math.pi/6) * arrow_size)
+        arrow_p2 = end_pos - QPointF(math.cos(angle + math.pi/6) * arrow_size,
+                                    math.sin(angle + math.pi/6) * arrow_size)
+        
+        arrow = QGraphicsPolygonItem(QPolygonF([end_pos, arrow_p1, arrow_p2]))
+        arrow.setBrush(Qt.GlobalColor.black)
+        scene.addItem(arrow)
+
+        self.add_connection(from_item, to_item, (line, arrow))
+        return line
 
     def print_connections(self):
         current = self.head
@@ -63,23 +99,25 @@ class ConnectionList:
         current = self.head
         prev = None
         while current:
-            # Check if either the 'from' or 'to' item is the one being removed
             if current.from_item == item_to_remove or current.to_item == item_to_remove:
-                # Remove the line item from the scene if it's still there
-                if current.line_item.scene():
-                    current.line_item.scene().removeItem(current.line_item)
+                # Remove both line and arrow from scene
+                if isinstance(current.line_item, tuple):  # Si es una tupla (línea, flecha)
+                    for item in current.line_item:
+                        if item.scene():
+                            item.scene().removeItem(item)
+                else:
+                    if current.line_item.scene():
+                        current.line_item.scene().removeItem(current.line_item)
 
-                # Adjust the linked list pointers
                 if prev:
                     prev.next = current.next
                 else:
                     self.head = current.next
 
-                # Move to the next node, as the current one is being deleted
                 removed_node = current
                 current = current.next
-                del removed_node # Explicitly delete the node object
-                continue # Skip prev update for this iteration
+                del removed_node
+                continue
 
             prev = current
             current = current.next
@@ -87,20 +125,30 @@ class ConnectionList:
     def update_connections_for_item(self, item):
         current = self.head
         while current:
-            # Only update if the item is part of the connection
             if current.from_item == item or current.to_item == item:
-                # Ensure items are still in the scene before trying to get their center
                 if current.from_item.scene() and current.to_item.scene():
-                    start_pos = current.from_item.center()
-                    end_pos = current.to_item.center()
-                    current.line_item.setLine(QLineF(start_pos, end_pos))
-                else:
-                    # If one of the connected items is no longer in the scene,
-                    # the connection itself should likely be removed.
-                    # This scenario should be handled by remove_connections_with
-                    # when an item is explicitly deleted.
-                    pass
-            current = current.next
+                    # Usar puntos de conexión específicos
+                    start_pos = current.from_item.get_connection_point(
+                        current.to_item.center(), is_input=False)
+                    end_pos = current.to_item.get_connection_point(
+                        current.from_item.center(), is_input=True)
+                    
+                    current.line_item[0].setLine(QLineF(start_pos, end_pos))
+                    
+                    # Actualizar flecha
+                    arrow_size = 10
+                    angle = math.atan2(end_pos.y() - start_pos.y(), 
+                                    end_pos.x() - start_pos.x())
+                    
+                    arrow_p1 = end_pos - QPointF(
+                        math.cos(angle - math.pi/6) * arrow_size,
+                        math.sin(angle - math.pi/6) * arrow_size)
+                    arrow_p2 = end_pos - QPointF(
+                        math.cos(angle + math.pi/6) * arrow_size,
+                        math.sin(angle + math.pi/6) * arrow_size)
+                    
+                    current.line_item[1].setPolygon(QPolygonF([end_pos, arrow_p1, arrow_p2]))
+            current = current.next            
 
     def get_connections_from(self, from_item):
         connections = []
@@ -250,7 +298,64 @@ class FlowShape(QGraphicsItem):
 
     def center(self):
         return self.scenePos() + QPointF(self.boundingRect().width() / 2,
-                                         self.boundingRect().height() / 2)
+                                        self.boundingRect().height() / 2)
+    
+    def edge_point(self, target_center, is_input=True):
+        """Calcula el punto en el borde más cercano al punto objetivo, considerando puntos de conexión específicos"""
+        if self.shape_type != 'decision':
+            return self._calculate_general_edge_point(target_center)
+        
+        connection_points = self.get_connection_points(is_input)
+        
+        # Encontrar el punto más cercano al objetivo
+        closest_point = None
+        min_distance = float('inf')
+        
+        for point in connection_points:
+            # Convertir a coordenadas de escena
+            scene_point = self.mapToScene(point)
+            distance = QLineF(scene_point, target_center).length()
+            
+            if distance < min_distance:
+                min_distance = distance
+                closest_point = scene_point
+        
+        return closest_point if closest_point else self.center()
+
+    def _calculate_general_edge_point(self, target_center):
+        """Método original para calcular puntos de borde para formas no-decisión"""
+        center_pos = self.center()
+        rect = self.boundingRect()
+        rect.moveTo(self.scenePos())
+        
+        direction = target_center - center_pos
+        if direction.x() == 0 and direction.y() == 0:
+            return center_pos
+        
+        length = (direction.x()**2 + direction.y()**2)**0.5
+        if length == 0:
+            return center_pos
+        
+        direction = direction / length
+        
+        if self.shape_type in ['start_end', 'connector']:
+            radius = min(rect.width(), rect.height()) / 2
+            return center_pos + direction * radius
+        
+        half_width = rect.width() / 2
+        half_height = rect.height() / 2
+        
+        if direction.x() == 0:
+            return center_pos + QPointF(0, half_height if direction.y() > 0 else -half_height)
+        
+        if direction.y() == 0:
+            return center_pos + QPointF(half_width if direction.x() > 0 else -half_width, 0)
+        
+        tx = (half_width if direction.x() > 0 else -half_width) / direction.x()
+        ty = (half_height if direction.y() > 0 else -half_height) / direction.y()
+        
+        t = min(tx, ty)
+        return center_pos + direction * t
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
@@ -258,6 +363,29 @@ class FlowShape(QGraphicsItem):
             if scene and hasattr(scene, 'connections'):
                 scene.connections.update_connections_for_item(self)
         return super().itemChange(change, value)
+    
+    def get_connection_point(self, target_pos, is_input):
+        """Obtiene el punto de conexión específico para decisiones"""
+        if self.shape_type != 'decision':
+            return self.center()
+        
+        rect = self.boundingRect()
+        center = rect.center()
+        local_pos = self.mapFromScene(target_pos)
+        
+        # Para decisiones
+        if is_input:
+            # Conexiones entrantes (arriba o izquierda)
+            if abs(local_pos.x() - rect.left()) < abs(local_pos.y() - rect.top()):
+                return self.mapToScene(QPointF(rect.left(), center.y()))  # Izquierda
+            else:
+                return self.mapToScene(QPointF(center.x(), rect.top()))   # Arriba
+        else:
+            # Conexiones salientes (derecha o abajo)
+            if abs(local_pos.x() - rect.right()) < abs(local_pos.y() - rect.bottom()):
+                return self.mapToScene(QPointF(rect.right(), center.y())) # Derecha
+            else:
+                return self.mapToScene(QPointF(center.x(), rect.bottom())) # Abajo
 
 
 class FlowScene(QGraphicsScene):
@@ -303,66 +431,42 @@ class FlowScene(QGraphicsScene):
     def mousePressEvent(self, event):
         item_at_click = self.itemAt(event.scenePos(), self.views()[0].transform())
 
-        if self.selected_shape:
-            shape = FlowShape(self.selected_shape)
-            shape.setPos(event.scenePos())
-            self.addItem(shape)
-            if shape.shape_type == 'start_end' and self.start_node is None:
-                self.set_start_node(shape)
-            return
-
-        elif self.connection_mode:
+        if self.connection_mode:
             if isinstance(item_at_click, FlowShape):
                 if self.first_item is None:
+                    # Validar si es un punto de salida válido (para decisiones)
+                    if item_at_click.shape_type == 'decision':
+                        click_pos = item_at_click.mapFromScene(event.scenePos())
+                        rect = item_at_click.boundingRect()
+                        
+                        # Solo permitir comenzar conexiones desde derecha o abajo
+                        if not (click_pos.x() >= rect.right() - 10 or click_pos.y() >= rect.bottom() - 10):
+                            QMessageBox.warning(self.views()[0], "Error", 
+                                            "En decisiones, las conexiones salientes deben comenzar desde la derecha o abajo")
+                            return
+                    
                     self.first_item = item_at_click
-                    self.first_item.set_as_start_connector(True)
+                    self.first_item.highlight(QColor("green"))
+                
                 else:
-                    second_item = item_at_click
-                    if second_item != self.first_item:
-                        self.create_connection(self.first_item, second_item)
-
-                    self.first_item.set_as_start_connector(False)
+                    # Validar si es un punto de entrada válido (para decisiones)
+                    if item_at_click.shape_type == 'decision':
+                        click_pos = item_at_click.mapFromScene(event.scenePos())
+                        rect = item_at_click.boundingRect()
+                        
+                        # Solo permitir conexiones entrantes por izquierda o arriba
+                        if not (click_pos.x() <= rect.left() + 10 or click_pos.y() <= rect.top() + 10):
+                            QMessageBox.warning(self.views()[0], "Error",
+                                            "En decisiones, las conexiones entrantes deben llegar por arriba o izquierda")
+                            self.first_item.highlight(None)
+                            self.first_item = None
+                            return
+                    
+                    # Crear la conexión
+                    self.connections.create_connection(self.first_item, item_at_click, self)
+                    self.first_item.highlight(None)
                     self.first_item = None
-                    if self.temp_line:
-                        if self.temp_line.scene():
-                            self.removeItem(self.temp_line)
-                            self.temp_line = None
-            else:
-                if self.first_item:
-                    self.first_item.set_as_start_connector(False)
-                    self.first_item = None
-                if self.temp_line:
-                    if self.temp_line.scene():
-                        self.removeItem(self.temp_line)
-                    self.temp_line = None
-            return
-
-        elif self.text_mode:
-            if isinstance(item_at_click, FlowShape):
-                if item_at_click.shape_type == 'process':
-                    text, ok = QInputDialog.getMultiLineText(
-                        self.views()[0],
-                        "Agregar/Editar Texto de Proceso",
-                        "Ingrese el texto para el proceso (acepta saltos de línea):",
-                        item_at_click.text
-                    )
-                    if ok:
-                        item_at_click.text = text
-                else:
-                    # Corrección aquí: Usar QLineEdit.EchoMode.Normal
-                    text, ok = QInputDialog.getText(
-                        self.views()[0],
-                        "Agregar/Editar Texto",
-                        f"Ingrese el texto para la figura '{item_at_click.shape_type}':",
-                        QLineEdit.EchoMode.Normal,  # Cambiado de QLineEdit.Normal
-                        item_at_click.text
-                    )
-                    if ok:
-                        item_at_click.text = text
-            return
-
-        super().mousePressEvent(event)
-
+                    
     def mouseMoveEvent(self, event):
         if self.connection_mode and self.first_item:
             if not self.temp_line:
