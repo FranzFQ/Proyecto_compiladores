@@ -6,7 +6,7 @@ import re
 # Definir patrones de tokens
 
 token_patron = {
-    "KEYWORD": r'\b(if|else|while|for|return|int|str|float|void|class|def|print|input)\b',
+    "KEYWORD": r'\b(if|else|while|for|return|int|str|float|void|class|def|print|inputStr|inputNum)\b',
     "IDENTIFIER": r'\b[a-zA-Z_][a-zA-Z0-9_]*\b',
     "NUMBER": r'\b\d+\b',
     "OPERATOR": r'<=|>=|==|!=|&&|"|[\+\-\*/=<>\!\||\|\']',
@@ -431,6 +431,19 @@ class NodoPrint(NodoAST):
             codigo.append('   call printnum')
             
         return "\n".join(codigo)
+    
+class NodoPrintList(NodoAST):
+    # Nodo que representa a la función print
+    def __init__(self, variables):
+        self.variables = variables # Es una lista de NodoPrint
+
+    def generar_codigo(self):
+        codigo = []
+        for variable in self.variables:
+            # Cargar la variable en eax
+            codigo.append(variable.generar_codigo())
+     
+        return "\n".join(codigo)
 
 class NodoCadena(NodoAST):
     def __init__(self, valor):
@@ -537,6 +550,11 @@ class AnalizadorSemantico:
                 else:
                     raise Exception(f"Error: Tipo de variable '{nodo.variable.nombre[1]}' no soportado en print")            
 
+        elif isinstance(nodo, NodoPrintList): # NodoPrintList es una lista que contiene varios NodoPrint
+            for variablePrint in nodo.variables:
+                self.analizar(variablePrint)
+
+
         elif isinstance(nodo, NodoDeclaracionVariable):
             # Verificar si la variable ya existe
             if nodo.nombre[1] in self.tabla_simbolos.variables:
@@ -596,6 +614,7 @@ class AnalizadorSemantico:
             # Analizar el cuerpo del while
             for instruccion in nodo.cuerpo:
                 self.analizar(instruccion)
+
                 
         elif isinstance(nodo, NodoLlamadaFuncion):
             tipo_retorno, parametros = self.tabla_simbolos.obtener_info_funcion(nodo.nombre[1])
