@@ -34,13 +34,13 @@ printStr:
     pop edx
     ret
 ; ----------------------- funcion input --------------------
-input:
+inputStr:
     push    edx
     push    ecx
     push    ebx
     push    eax
 
-    mov     ebx, 30 ; suponiendo un tamaño para la cadena de 30
+    mov     ebx, 45 ; suponiendo un tamaño para la cadena de 30
 
     mov     edx, ebx        ; edx = espacio total para lectura
     mov     ecx, eax        ; ecx = dir. de memoria para almacenar el dato
@@ -55,36 +55,61 @@ input:
     ret
 
 
-atoi:
-    push ebx
+; --------------------- Funcion de ingreso de numeros ----------
+inputNum:
+    push eax
     push ecx
     push edx
+    push esi
+    push ebx
 
-    xor ebx, ebx      ; EBX = resultado = 0
+    ; Leer cadena con inputStr (resultado va en [eax])
+    call inputStr
 
-.next_char:
-    mov cl, [eax]     ; cargar siguiente carácter en CL
-    cmp cl, 0         ; fin de cadena?
-    je .done
+    mov esi, eax        ; ESI apunta al inicio de la cadena
+    xor ecx, ecx        ; ECX = acumulador numérico
+    xor edx, edx        ; EDX = dígito temporal
+    xor ebx, ebx        ; EBX = flag de signo negativo (0=positivo, 1=negativo)
 
-    sub cl, '0'       ; convertir ASCII a valor numérico
-    cmp cl, 9
-    ja .done          ; si no es dígito, salir (seguridad básica)
+    ; Verificar si es negativo
+    mov dl, [esi]
+    cmp dl, '-'
+    jne .convertir
 
-    movzx edx, cl     ; mover dígito a EDX (zero extend)
-    imul ebx, ebx, 10 ; resultado *= 10
-    add ebx, edx      ; resultado += dígito
+    ; Es negativo
+    mov ebx, 1          ; Marcar como negativo
+    inc esi             ; Avanzar al siguiente carácter
 
-    inc eax           ; avanzar al siguiente carácter
-    jmp .next_char
+.convertir:
+    mov dl, [esi]
+    cmp dl, 10          ; Enter (salto de línea)
+    je .fin_convertir
+    cmp dl, 0
+    je .fin_convertir
 
-.done:
-    mov eax, ebx      ; poner resultado en EAX
+    sub dl, '0'         ; ASCII -> número
+    imul ecx, ecx, 10
+    add ecx, edx
+    inc esi
+    jmp .convertir
 
+.fin_convertir:
+    cmp ebx, 1
+    jne .almacenar
+
+    ; Aplicar signo negativo
+    neg ecx
+
+.almacenar:
+    mov [eax], ecx      ; Guardar número en memoria
+
+    pop ebx
+    pop esi
     pop edx
     pop ecx
-    pop ebx
+    pop eax
     ret
+
 
 
 
@@ -114,48 +139,61 @@ finLen:
 
 ;--------------------- Imprimir variables que contengan número --------------
 
-printnum:
-
+printnum: 
     push edx
     push ecx
     push ebx
-    push eax ; Acá apunta al numero
+    push eax            ; Guardar número original (negativo o no)
 
+    mov ebx, eax        ; Copiar eax a ebx para análisis
+    cmp ebx, 0
+    jge .positivo       ; Si es positivo, saltar
 
-    pop eax
-    ; Convertir número a string (maneja múltiples dígitos)
-    mov ecx, 10         ; Divisor para conversión
-    mov edi, char+11
-    mov byte [edi], 0   ; Null terminator
-    dec edi
-    mov byte [edi], 0xA  ; Newline
-    dec edi
-    mov esi, 2          ; Contador de caracteres (newline + null)",
-
-convert_loop:
-    xor edx, edx       ; Limpiar edx para división
-    div ecx           ; eax = eax/10, edx = resto
-    add dl, '0'         ; Convertir a ASCII
-    mov [edi], dl       ; Almacenar dígito
-    dec edi
-    inc esi
-    test eax, eax      ; Verificar si eax es cero
-    jnz convert_loop
-
-    ; Ajustar puntero al inicio del número
-    inc edi
-
-    ; Imprimir el número con newline
-    mov eax, 4          ; sys_write
-    mov ebx, 1          ; stdout
-    mov ecx, edi        ; Puntero al string
-    mov edx, esi        ; Longitud (dígitos + newline)
+    ; Manejo de número negativo
+    ; Imprimir signo '-'
+    mov eax, 4
+    mov ebx, 1
+    mov ecx, signo_menos
+    mov edx, 1
     int 0x80
 
-    pop     ebx
-    pop     ecx
-    pop     edx
+    ; Convertir a positivo para impresión
+    pop eax             ; Recuperar original
+    neg eax             ; eax = -eax
+    push eax            ; Guardar valor positivo nuevamente
+.positivo:
 
+    ; Conversión a cadena decimal
+    pop eax             ; eax tiene el número positivo
+    mov ecx, 10         ; Divisor
+    mov edi, charr+11
+    mov byte [edi], 0   ; Null terminator
+    dec edi
+    mov byte [edi], 0xA ; Newline
+    dec edi
+    mov esi, 2          ; Contador de caracteres (newline + null)
 
-    ret  ; Retornar de la función printnum
+convert_loop:
+    xor edx, edx
+    div ecx             ; eax / 10, resto en edx
+    add dl, '0'
+    mov [edi], dl
+    dec edi
+    inc esi
+    test eax, eax
+    jnz convert_loop
+
+    inc edi             ; Ajustar puntero al inicio del número
+
+    ; Imprimir el número
+    mov eax, 4
+    mov ebx, 1
+    mov ecx, edi
+    mov edx, esi
+    int 0x80
+
+    pop ebx
+    pop ecx
+    pop edx
+    ret
 

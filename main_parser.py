@@ -4,16 +4,7 @@ from analizador import *
 
 texto = """
 
-int main() {
-int a = 6;
-if (a > 5) {
-print("hola mundo", a, "hola mundo2");
 
-
-} else {
-print("adios mundo", a, "adios mundo2");
-}
-}
 
 """
 
@@ -354,8 +345,8 @@ def imprimir_ast(nodo):
 
 #  Aquí se prueba
 try:
-    parseando = Parseador(token)
-    arbol_ast = parseando.parsear()
+    # parseando = Parseador(token)
+    # arbol_ast = parseando.parsear()
     # # print(arbol_ast)
 
     # # # print(arbol_ast)
@@ -375,13 +366,13 @@ try:
     # # #     print(f"{llave}:{valor}")
 
 
-    codigo_asm = arbol_ast.generar_codigo()
-    with open("programa.asm", "w") as archivo:
-        archivo.write(codigo_asm)
+    # codigo_asm = arbol_ast.generar_codigo()
+    # with open("programa.asm", "w") as archivo:
+    #     archivo.write(codigo_asm)
 
-    subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
-    subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
-    subprocess.run(["./programa"])
+    # subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
+    # subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
+    # subprocess.run(["./programa"])
 
     # # print('Análisis sintáctico exitoso')
     # # print(json.dumps(imprimir_ast(arbol_ast), indent=1))

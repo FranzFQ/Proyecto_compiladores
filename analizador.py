@@ -77,7 +77,9 @@ class NodoPrograma(NodoAST):
         for nombre, valor in self.cadenas.items():
             # Reservar espacio para la cadena
             codigo.append(f"   {nombre} db '{valor}', 0")
-
+        codigo.append("   signo_menos db '-'")
+        codigo.append("   charr db 12 dup(0)")  # Buffer para número convertido
+          
         # Agregar variable salto de línea
         codigo.append("   newline db 0xA")  # Salto de línea
         codigo.append("section .bss")
@@ -392,11 +394,16 @@ class NodoInput(NodoAST):
 
     def generar_codigo(self):
         codigo = []
-        # Llamar a la función de entrada
-        # La función input recibirá el valor en el buffer que se le envíe en eax
-        codigo.append(f'   mov eax, {self.variable.nombre[1]} ; Cargar dirección de la variable en eax')
-        # Llamar a la función input
-        codigo.append(f'   call input')
+        # Segun el tipo de variable (str o int), se debe cargar el valor en eax
+        # Si self.variable.tipo == 'int':
+        if self.variable.tipo == 'int':
+            codigo.append(f'   mov eax, {self.variable.nombre[1]} ; Cargar dirección de la variable en eax')
+            codigo.append(f'   call inputNum')
+        elif self.variable.tipo == 'str':
+            codigo.append(f'   mov eax, {self.variable.nombre[1]} ; Cargar dirección de la variable en eax')
+            codigo.append(f'   call inputStr')
+        else:
+            raise Exception(f"Error: Tipo de variable '{self.variable.nombre[1]}' no soportado en input")
 
         # Guardar el resultado en la variable
         return "\n".join(codigo)
@@ -627,7 +634,19 @@ class AnalizadorSemantico:
         elif isinstance(nodo, NodoInput):
             # Verificar si la variable existe
             if isinstance(nodo.variable, NodoIdentificador):
-                self.tabla_simbolos.obtener_tipo_variable(nodo.variable.nombre[1])
+                tipo = self.tabla_simbolos.obtener_tipo_variable(nodo.variable.nombre[1])
+                # Cambiar el tipo de la variable a 'int' o 'str' dependiendo de la entrada
+                if tipo == 'int':
+                    nodo.variable.tipo = 'int'
+                elif tipo == 'str':
+                    nodo.variable.tipo = 'str'
+                elif tipo == 'float':
+                    nodo.variable.tipo = 'float'
+                elif tipo == 'char':
+                    nodo.variable.tipo = 'char'
+                else:
+                    raise Exception(f"Error: Tipo de variable '{nodo.variable.nombre[1]}' no soportado en input")
+                
             else:
                 raise Exception(f"Error: La variable '{nodo.variable}' no está declarada")
         elif isinstance(nodo, NodoRetorno):
