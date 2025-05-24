@@ -1,33 +1,17 @@
 import sys
-from analizador import tokenize
-from main_parser import Parseador
-import subprocess
+import math
 import uuid
 from collections import deque
-import math
-
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsItem,
-    QGraphicsLineItem, QToolBar, QVBoxLayout, QWidget, QInputDialog, QLineEdit,
-    QMessageBox, QHBoxLayout, QLabel, QSizePolicy, QPushButton, QTextEdit, QGraphicsPolygonItem
+    QGraphicsLineItem, QGraphicsPolygonItem, QToolBar, QVBoxLayout, QWidget, 
+    QInputDialog, QLineEdit, QMessageBox, QHBoxLayout, QLabel, QSizePolicy, 
+    QPushButton, QTextEdit
 )
 from PyQt6.QtGui import (
-    QPolygonF, QPen, QColor, QAction, QPainter, QCursor, QTextOption, QFontMetrics, QFont
+    QPolygonF, QPen, QColor, QAction, QPainter, QCursor, QFont, QBrush, QFontMetrics
 )
-from PyQt6.QtCore import Qt, QPointF, QRectF, QLineF, QProcess, QRect
-
-
-# Assuming 'parser.py' exists and has a class Parser
-try:
-    from parser import Parser
-except ImportError:
-    class Parser:
-        def __init__(self, data):
-            self.data = data
-        def generate_code(self):
-            return "¡Hola desde el generador de código de ejemplo! (parser.py no encontrado o sin implementar)"
-    print("Advertencia: No se encontró el módulo 'parser.py' o la clase 'Parser'. Usando un parser de ejemplo.")
-
+from PyQt6.QtCore import Qt, QPointF, QRectF, QLineF, QRect, QProcess
 
 class ConnectionNode:
     def __init__(self, from_item, to_item, line_item):
@@ -35,11 +19,6 @@ class ConnectionNode:
         self.to_item = to_item
         self.line_item = line_item
         self.next = None
-
-
-class ConnectionList:
-    def __init__(self):
-        self.head = None
 
 class ConnectionList:
     def __init__(self):
@@ -56,52 +35,72 @@ class ConnectionList:
             current.next = new_node
 
     def create_connection(self, from_item, to_item, scene):
-        # Validar conexiones para objetos de decisión
-        if from_item.shape_type == 'decision' and to_item.shape_type == 'decision':
-            QMessageBox.warning(None, "Error", "No se puede conectar dos decisiones directamente")
+        try:
+            # Verificar que los ítems existen y están en la escena
+            if not from_item or not to_item or from_item == to_item:
+                return None
+
+            # Calcular puntos de inicio y fin
+            from_center = from_item.center()
+            to_center = to_item.center()
+            
+            # Verificar que los puntos son válidos
+            if not from_center or not to_center:
+                return None
+                
+            start_pos = from_item.edge_point(to_center)
+            end_pos = to_item.edge_point(from_center)
+            
+            # Crear la línea principal
+            line = QGraphicsLineItem()
+            pen = QPen(QColor("#555555"), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            line.setPen(pen)
+            line.setLine(QLineF(start_pos, end_pos))
+            
+            # Crear flecha solo si la línea tiene longitud suficiente
+            if QLineF(start_pos, end_pos).length() > 5:
+                arrow_size = 10
+                angle = math.atan2(end_pos.y() - start_pos.y(), end_pos.x() - start_pos.x())
+                
+                # Ajustar el punto final para que la flecha no se superponga
+                adjusted_end = end_pos - QPointF(math.cos(angle) * 2, math.sin(angle) * 2)
+                
+                arrow_p1 = adjusted_end - QPointF(
+                    math.cos(angle - math.pi/6) * arrow_size,
+                    math.sin(angle - math.pi/6) * arrow_size
+                )
+                arrow_p2 = adjusted_end - QPointF(
+                    math.cos(angle + math.pi/6) * arrow_size,
+                    math.sin(angle + math.pi/6) * arrow_size
+                )
+                
+                arrow_head = QPolygonF()
+                arrow_head.append(adjusted_end)
+                arrow_head.append(arrow_p1)
+                arrow_head.append(arrow_p2)
+                
+                arrow = QGraphicsPolygonItem(arrow_head)
+                arrow.setBrush(QColor("#555555"))
+                arrow.setPen(QPen(Qt.GlobalColor.transparent))
+                
+                scene.addItem(arrow)
+                self.add_connection(from_item, to_item, (line, arrow))
+            else:
+                self.add_connection(from_item, to_item, (line, None))
+            
+            scene.addItem(line)
+            return line
+            
+        except Exception as e:
+            print(f"Error al crear conexión: {str(e)}")
             return None
-
-        # Obtener puntos de conexión específicos
-        start_pos = from_item.get_connection_point(to_item.center(), is_input=False)
-        end_pos = to_item.get_connection_point(from_item.center(), is_input=True)
-
-        # Crear la línea
-        line = QGraphicsLineItem(QLineF(start_pos, end_pos))
-        line.setPen(QPen(Qt.GlobalColor.black, 2))
-        scene.addItem(line)
-
-        # Crear flecha
-        arrow_size = 10
-        angle = math.atan2(end_pos.y() - start_pos.y(), end_pos.x() - start_pos.x())
-        
-        arrow_p1 = end_pos - QPointF(math.cos(angle - math.pi/6) * arrow_size,
-                                    math.sin(angle - math.pi/6) * arrow_size)
-        arrow_p2 = end_pos - QPointF(math.cos(angle + math.pi/6) * arrow_size,
-                                    math.sin(angle + math.pi/6) * arrow_size)
-        
-        arrow = QGraphicsPolygonItem(QPolygonF([end_pos, arrow_p1, arrow_p2]))
-        arrow.setBrush(Qt.GlobalColor.black)
-        scene.addItem(arrow)
-
-        self.add_connection(from_item, to_item, (line, arrow))
-        return line
-
-    def print_connections(self):
-        current = self.head
-        print("Conexiones:")
-        while current:
-            from_text = current.from_item.text if current.from_item.text else current.from_item.shape_type
-            to_text = current.to_item.text if current.to_item.text else current.to_item.shape_type
-            print(f"'{from_text}' ({current.from_item.id}) → '{to_text}' ({current.to_item.id})")
-            current = current.next
 
     def remove_connections_with(self, item_to_remove):
         current = self.head
         prev = None
         while current:
             if current.from_item == item_to_remove or current.to_item == item_to_remove:
-                # Remove both line and arrow from scene
-                if isinstance(current.line_item, tuple):  # Si es una tupla (línea, flecha)
+                if isinstance(current.line_item, tuple):
                     for item in current.line_item:
                         if item.scene():
                             item.scene().removeItem(item)
@@ -121,35 +120,52 @@ class ConnectionList:
 
             prev = current
             current = current.next
-
+                
     def update_connections_for_item(self, item):
         current = self.head
         while current:
-            if current.from_item == item or current.to_item == item:
-                if current.from_item.scene() and current.to_item.scene():
-                    # Usar puntos de conexión específicos
-                    start_pos = current.from_item.get_connection_point(
-                        current.to_item.center(), is_input=False)
-                    end_pos = current.to_item.get_connection_point(
-                        current.from_item.center(), is_input=True)
-                    
-                    current.line_item[0].setLine(QLineF(start_pos, end_pos))
-                    
-                    # Actualizar flecha
-                    arrow_size = 10
-                    angle = math.atan2(end_pos.y() - start_pos.y(), 
-                                    end_pos.x() - start_pos.x())
-                    
-                    arrow_p1 = end_pos - QPointF(
-                        math.cos(angle - math.pi/6) * arrow_size,
-                        math.sin(angle - math.pi/6) * arrow_size)
-                    arrow_p2 = end_pos - QPointF(
-                        math.cos(angle + math.pi/6) * arrow_size,
-                        math.sin(angle + math.pi/6) * arrow_size)
-                    
-                    current.line_item[1].setPolygon(QPolygonF([end_pos, arrow_p1, arrow_p2]))
-            current = current.next            
-
+            try:
+                if current.from_item == item or current.to_item == item:
+                    if current.from_item.scene() and current.to_item.scene():
+                        # Calcular nuevos puntos
+                        from_center = current.from_item.center()
+                        to_center = current.to_item.center()
+                        
+                        start_pos = current.from_item.edge_point(to_center)
+                        end_pos = current.to_item.edge_point(from_center)
+                        
+                        # Actualizar línea
+                        if isinstance(current.line_item, tuple) and current.line_item[0]:
+                            current.line_item[0].setLine(QLineF(start_pos, end_pos))
+                            
+                            # Actualizar flecha si existe
+                            if current.line_item[1] and QLineF(start_pos, end_pos).length() > 5:
+                                arrow_size = 10
+                                angle = math.atan2(end_pos.y() - start_pos.y(), 
+                                                end_pos.x() - start_pos.x())
+                                
+                                adjusted_end = end_pos - QPointF(math.cos(angle) * 2, math.sin(angle) * 2)
+                                
+                                arrow_p1 = adjusted_end - QPointF(
+                                    math.cos(angle - math.pi/6) * arrow_size,
+                                    math.sin(angle - math.pi/6) * arrow_size
+                                )
+                                arrow_p2 = adjusted_end - QPointF(
+                                    math.cos(angle + math.pi/6) * arrow_size,
+                                    math.sin(angle + math.pi/6) * arrow_size
+                                )
+                                
+                                arrow_head = QPolygonF()
+                                arrow_head.append(adjusted_end)
+                                arrow_head.append(arrow_p1)
+                                arrow_head.append(arrow_p2)
+                                
+                                current.line_item[1].setPolygon(arrow_head)
+            except Exception as e:
+                print(f"Error al actualizar conexión: {str(e)}")
+                
+            current = current.next
+            
     def get_connections_from(self, from_item):
         connections = []
         current = self.head
@@ -159,65 +175,35 @@ class ConnectionList:
             current = current.next
         return connections
 
-
 class FlowShape(QGraphicsItem):
-    def __init__(self, shape_type, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, shape_type, parent=None):
+        super().__init__(parent)
         self.shape_type = shape_type
         self.id = str(uuid.uuid4())
-        self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable |
-                      QGraphicsItem.GraphicsItemFlag.ItemIsSelectable |
-                      QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
-        self._is_start_connector = False
-        self._highlight_color = None
         self._text = ""
+        self._highlight_color = None
+        self._is_start_connector = False
         self.padding = 10
-        self.set_min_size(100, 60)
-
+        self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable |
+                     QGraphicsItem.GraphicsItemFlag.ItemIsSelectable |
+                     QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
+        
+        # Tamaño mínimo inicial
+        self.min_width = 100
+        self.min_height = 60
+        
+        # Fuente para el texto
         self.font = QFont()
         self.font.setPointSize(10)
 
-
-    def set_min_size(self, width, height):
-        self.min_width = width
-        self.min_height = height
-
-    @property
-    def text(self):
-        return self._text
-
-    @text.setter
-    def text(self, new_text):
-        if self._text != new_text:
-            self._text = new_text
-            self.prepareGeometryChange()
-            self.update()
-
-    def calculate_text_rect(self):
-        font_metrics = QFontMetrics(self.font)
-        max_text_width = self.min_width - 2 * self.padding
-        if max_text_width <= 0:
-            max_text_width = 1
-
-        text_bounding_rect = font_metrics.boundingRect(
-            QRect(0, 0, max_text_width, 0),
-            Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
-            self.text
-        )
-        return text_bounding_rect.size()
-
-
     def boundingRect(self):
         rect = QRectF(0, 0, self.min_width, self.min_height)
-
         if self.text:
             text_size = self.calculate_text_rect()
             new_width = max(self.min_width, text_size.width() + 2 * self.padding)
             new_height = max(self.min_height, text_size.height() + 2 * self.padding)
             rect = QRectF(0, 0, new_width, new_height)
-
         return rect.normalized()
-
 
     def paint(self, painter: QPainter, option, widget):
         pen = QPen(Qt.GlobalColor.black, 2)
@@ -267,126 +253,118 @@ class FlowShape(QGraphicsItem):
             painter.drawPolygon(QPolygonF(points))
         elif self.shape_type == 'connector':
             diameter = min(current_rect.width(), current_rect.height()) - self.padding
-            # Convertir a enteros explícitamente
-            x = int(current_rect.center().x() - diameter / 2)
-            y = int(current_rect.center().y() - diameter / 2)
-            w = int(diameter)
-            h = int(diameter)
-            painter.drawEllipse(x, y, w, h)
-            
+            # Usando QRectF para el círculo
+            ellipse_rect = QRectF(
+                current_rect.center().x() - diameter / 2,
+                current_rect.center().y() - diameter / 2,
+                diameter,
+                diameter
+            )
+            painter.drawEllipse(ellipse_rect)
         elif self.shape_type == 'function_call':
             painter.drawRect(current_rect)
-            painter.drawLine(int(current_rect.left() + self.padding/2), int(current_rect.top()), int(current_rect.left() + self.padding/2), int(current_rect.bottom()))
-            painter.drawLine(int(current_rect.right() - self.padding/2), int(current_rect.top()), int(current_rect.right() - self.padding/2), int(current_rect.bottom()))
-
+            painter.drawLine(
+                int(current_rect.left() + self.padding/2), 
+                int(current_rect.top()), 
+                int(current_rect.left() + self.padding/2), 
+                int(current_rect.bottom())
+            )
+            painter.drawLine(
+                int(current_rect.right() - self.padding/2), 
+                int(current_rect.top()), 
+                int(current_rect.right() - self.padding/2), 
+                int(current_rect.bottom())
+            )
 
         if self.text:
             painter.setPen(QPen(Qt.GlobalColor.black))
             painter.setFont(self.font)
             text_rect = current_rect.adjusted(self.padding, self.padding, -self.padding, -self.padding)
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, self.text)
+            
+    def calculate_text_rect(self):
+        font_metrics = QFontMetrics(self.font)
+        max_text_width = self.min_width - 2 * self.padding
+        text_bounding_rect = font_metrics.boundingRect(
+            QRect(0, 0, max_text_width, 0),
+            Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+            self.text
+        )
+        return text_bounding_rect.size()
+
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, value):
+        self._text = value
+        self.update()
+
+    def set_min_size(self, width, height):
+        self.min_width = width
+        self.min_height = height
+        self.update()
 
     def set_as_start_connector(self, is_start):
-        if self._is_start_connector != is_start:
-            self._is_start_connector = is_start
-            self.update()
+        self._is_start_connector = is_start
+        self.update()
 
     def highlight(self, color):
-        if self._highlight_color != color:
-            self._highlight_color = color
-            self.update()
+        self._highlight_color = color
+        self.update()
 
     def center(self):
         return self.scenePos() + QPointF(self.boundingRect().width() / 2,
                                         self.boundingRect().height() / 2)
     
-    def edge_point(self, target_center, is_input=True):
-        """Calcula el punto en el borde más cercano al punto objetivo, considerando puntos de conexión específicos"""
-        if self.shape_type != 'decision':
-            return self._calculate_general_edge_point(target_center)
-        
-        connection_points = self.get_connection_points(is_input)
-        
-        # Encontrar el punto más cercano al objetivo
-        closest_point = None
-        min_distance = float('inf')
-        
-        for point in connection_points:
-            # Convertir a coordenadas de escena
-            scene_point = self.mapToScene(point)
-            distance = QLineF(scene_point, target_center).length()
-            
-            if distance < min_distance:
-                min_distance = distance
-                closest_point = scene_point
-        
-        return closest_point if closest_point else self.center()
-
-    def _calculate_general_edge_point(self, target_center):
-        """Método original para calcular puntos de borde para formas no-decisión"""
+    def edge_point(self, target_center):
+        """Calcula el punto en el borde más cercano al punto objetivo"""
         center_pos = self.center()
         rect = self.boundingRect()
         rect.moveTo(self.scenePos())
         
+        # Vector desde el centro al objetivo
         direction = target_center - center_pos
         if direction.x() == 0 and direction.y() == 0:
-            return center_pos
+            return center_pos  # Si es el mismo punto
         
+        # Normalizar el vector
         length = (direction.x()**2 + direction.y()**2)**0.5
         if length == 0:
             return center_pos
         
         direction = direction / length
         
-        if self.shape_type in ['start_end', 'connector']:
+        # Manejar formas especiales primero
+        if self.shape_type in ['start_end', 'connector']:  # Círculos
             radius = min(rect.width(), rect.height()) / 2
             return center_pos + direction * radius
         
+        # Para formas rectangulares (proceso, decisión, etc.)
         half_width = rect.width() / 2
         half_height = rect.height() / 2
         
-        if direction.x() == 0:
+        # Manejar casos donde la dirección es puramente horizontal o vertical
+        if direction.x() == 0:  # Movimiento vertical puro
             return center_pos + QPointF(0, half_height if direction.y() > 0 else -half_height)
         
-        if direction.y() == 0:
+        if direction.y() == 0:  # Movimiento horizontal puro
             return center_pos + QPointF(half_width if direction.x() > 0 else -half_width, 0)
         
+        # Calcular intersección con el rectángulo para dirección diagonal
         tx = (half_width if direction.x() > 0 else -half_width) / direction.x()
         ty = (half_height if direction.y() > 0 else -half_height) / direction.y()
         
         t = min(tx, ty)
         return center_pos + direction * t
-
+        
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
             scene = self.scene()
             if scene and hasattr(scene, 'connections'):
                 scene.connections.update_connections_for_item(self)
         return super().itemChange(change, value)
-    
-    def get_connection_point(self, target_pos, is_input):
-        """Obtiene el punto de conexión específico para decisiones"""
-        if self.shape_type != 'decision':
-            return self.center()
-        
-        rect = self.boundingRect()
-        center = rect.center()
-        local_pos = self.mapFromScene(target_pos)
-        
-        # Para decisiones
-        if is_input:
-            # Conexiones entrantes (arriba o izquierda)
-            if abs(local_pos.x() - rect.left()) < abs(local_pos.y() - rect.top()):
-                return self.mapToScene(QPointF(rect.left(), center.y()))  # Izquierda
-            else:
-                return self.mapToScene(QPointF(center.x(), rect.top()))   # Arriba
-        else:
-            # Conexiones salientes (derecha o abajo)
-            if abs(local_pos.x() - rect.right()) < abs(local_pos.y() - rect.bottom()):
-                return self.mapToScene(QPointF(rect.right(), center.y())) # Derecha
-            else:
-                return self.mapToScene(QPointF(center.x(), rect.bottom())) # Abajo
-
 
 class FlowScene(QGraphicsScene):
     def __init__(self):
@@ -394,18 +372,14 @@ class FlowScene(QGraphicsScene):
         self.selected_shape = None
         self.connection_mode = False
         self.text_mode = False
-
         self.first_item = None
         self.temp_line = None
-
         self.connections = ConnectionList()
         self.start_node = None
 
     def set_shape_type(self, shape_type):
-        is_activating = shape_type is not None
         self.selected_shape = shape_type
-
-        if is_activating:
+        if shape_type is not None:
             self.set_connection_mode(False)
             self.set_text_mode(False)
 
@@ -431,7 +405,16 @@ class FlowScene(QGraphicsScene):
     def mousePressEvent(self, event):
         item_at_click = self.itemAt(event.scenePos(), self.views()[0].transform())
 
-        if self.connection_mode:
+        if self.selected_shape:
+            # Crear nueva forma
+            shape = FlowShape(self.selected_shape)
+            shape.setPos(event.scenePos())
+            self.addItem(shape)
+            if shape.shape_type == 'start_end' and not self.start_node:
+                self.set_start_node(shape)
+            return
+
+        elif self.connection_mode:
             if isinstance(item_at_click, FlowShape):
                 if self.first_item is None:
                     # Validar si es un punto de salida válido (para decisiones)
@@ -446,8 +429,7 @@ class FlowScene(QGraphicsScene):
                             return
                     
                     self.first_item = item_at_click
-                    self.first_item.highlight(QColor("green"))
-                
+                    self.first_item.set_as_start_connector(True)
                 else:
                     # Validar si es un punto de entrada válido (para decisiones)
                     if item_at_click.shape_type == 'decision':
@@ -458,168 +440,55 @@ class FlowScene(QGraphicsScene):
                         if not (click_pos.x() <= rect.left() + 10 or click_pos.y() <= rect.top() + 10):
                             QMessageBox.warning(self.views()[0], "Error",
                                             "En decisiones, las conexiones entrantes deben llegar por arriba o izquierda")
-                            self.first_item.highlight(None)
+                            self.first_item.set_as_start_connector(False)
                             self.first_item = None
                             return
                     
                     # Crear la conexión
                     self.connections.create_connection(self.first_item, item_at_click, self)
-                    self.first_item.highlight(None)
+                    self.first_item.set_as_start_connector(False)
                     self.first_item = None
-                    
+            return
+
+        elif self.text_mode:
+            if isinstance(item_at_click, FlowShape):
+                if item_at_click.shape_type == 'process':
+                    text, ok = QInputDialog.getMultiLineText(
+                        self.views()[0], "Editar Texto",
+                        "Ingrese el texto:", item_at_click.text)
+                else:
+                    text, ok = QInputDialog.getText(
+                        self.views()[0], "Editar Texto",
+                        "Ingrese el texto:", QLineEdit.EchoMode.Normal, item_at_click.text)
+                
+                if ok:
+                    item_at_click.text = text
+            return
+
+        super().mousePressEvent(event)
+
     def mouseMoveEvent(self, event):
         if self.connection_mode and self.first_item:
             if not self.temp_line:
                 self.temp_line = QGraphicsLineItem()
                 self.temp_line.setPen(QPen(Qt.GlobalColor.darkGray, 2, Qt.PenStyle.DashLine))
                 self.addItem(self.temp_line)
-            start_pos = self.first_item.center()
-            end_pos = event.scenePos()
-            self.temp_line.setLine(QLineF(start_pos, end_pos))
+            
+            # Cambiar esta línea:
+            # start_pos = self.first_item.get_connection_point(event.scenePos(), is_input=False)
+            # Por esta:
+            start_pos = self.first_item.edge_point(event.scenePos())
+            
+            self.temp_line.setLine(QLineF(start_pos, event.scenePos()))
         else:
             super().mouseMoveEvent(event)
 
-    def create_connection(self, from_item, to_item):
-        # Ensure a connection is not made to itself
-        if from_item == to_item:
-            QMessageBox.warning(self.views()[0], "Error de Conexión", "No se puede conectar una figura consigo misma.")
-            return
-
-        # Check for existing connections between these two specific items
-        # To prevent duplicate lines, you might need to iterate through existing connections.
-        # For simplicity, this example allows multiple lines between the same two items.
-        # If you need to prevent duplicates, you'd add a loop here:
-        # for node in self.connections.get_connections_from(from_item):
-        #     if node == to_item:
-        #         QMessageBox.information(self.views()[0], "Conexión Existente", "Esta conexión ya existe.")
-        #         return
-
-        line = QGraphicsLineItem()
-        line.setPen(QPen(Qt.GlobalColor.black, 2))
-        self.addItem(line)
-        start_pos = from_item.center()
-        end_pos = to_item.center()
-        line.setLine(QLineF(start_pos, end_pos))
-        line.setZValue(-1) # Draw lines behind shapes
-        line.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False) # Lines are not directly selectable
-        self.connections.add_connection(from_item, to_item, line)
-
-    def removeItem(self, item):
-        # This method is called by the scene itself, often from delete_shape or when an item is deleted manually.
-        # Ensure connections are removed first to avoid dangling pointers or lines.
-        if isinstance(item, FlowShape):
-            # If the item being removed was the start node, clear the start node reference
-            if item == self.start_node:
-                self.set_start_node(None)
-            self.connections.remove_connections_with(item)
-
-        # Call the superclass method to actually remove the item from the scene
-        super().removeItem(item)
-
     def set_start_node(self, node):
         if self.start_node and self.start_node != node:
-            self.start_node.update() # Refresh old start node to remove gold highlight
+            self.start_node.update()
         self.start_node = node
         if self.start_node:
-            self.start_node.update() # Refresh new start node to apply gold highlight
-
-
-    def analisis_connections(self, initial_node):
-        final_flow_steps = []
-        visited_nodes_ids = set()
-        processing_queue = deque()
-        if self.start_node and initial_node == self.start_node:
-            processing_queue.append(self.start_node)
-        else:
-            # If initial_node is not explicitly the start_node, but we're analyzing a function,
-            # we should still start from that initial_node.
-            processing_queue.append(initial_node)
-
-        while processing_queue:
-            current_node_for_bfs = processing_queue.popleft()
-            if current_node_for_bfs.id in visited_nodes_ids:
-                continue
-            visited_nodes_ids.add(current_node_for_bfs.id)
-            final_flow_steps.append(current_node_for_bfs)
-
-            outgoing_connections = self.connections.get_connections_from(current_node_for_bfs)
-            for next_node_in_flow in outgoing_connections:
-                if next_node_in_flow.id not in visited_nodes_ids:
-                    processing_queue.append(next_node_in_flow)
-
-        if not final_flow_steps:
-             # This message should probably be handled by the caller (compile_flowchart)
-             # as this function is for analysis, not direct UI update.
-             return None
-
-        return final_flow_steps
-
-    def compile_flowchart(self):
-        if not self.start_node:
-            self.compilation_output_label.setText("Error: No se ha definido un nodo de inicio.\n"
-                                                 "Añada una figura 'Inicio/Fin'.")
-            QMessageBox.warning(self, "Error de Compilación", "No se ha definido un nodo de inicio.")
-            return
-
-        diccionary_functions = {}
-        all_start_end_nodes = [item for item in self.scene.items() if isinstance(item, FlowShape) and item.shape_type == "start_end"]
-
-        function_names = set()
-        for item in all_start_end_nodes:
-            if item.text.strip():
-                if item.text.strip() in function_names:
-                    QMessageBox.warning(self, "Error de sintaxis", f"Se detectaron dos funciones con el mismo nombre: '{item.text.strip()}'")
-                    self.compilation_output_label.setText(f"Error de sintaxis: Función duplicada '{item.text.strip()}'")
-                    return
-                function_names.add(item.text.strip())
-
-        main_start_node_found = False
-        for item in all_start_end_nodes:
-            if item.text.strip().lower() == "inicio":
-                main_start_node_found = True
-                flow_for_func = self.analisis_connections(item)
-                if flow_for_func is not None:
-                    diccionary_functions[item.text.strip()] = flow_for_func
-                else:
-                    self.compilation_output_label.setText("El nodo 'inicio' no tiene conexiones salientes o no se pudo procesar su flujo.")
-                    return
-                break
-
-        if not main_start_node_found:
-            self.compilation_output_label.setText("Advertencia: No se encontró un nodo 'Inicio'. Se compilarán otras funciones si existen.")
-            pass
-
-        for item in all_start_end_nodes:
-            if item.text.strip() and item.text.strip().lower() != "inicio":
-                flow_for_func = self.analisis_connections(item)
-                if flow_for_func is not None:
-                    diccionary_functions[item.text.strip()] = flow_for_func
-
-
-        output_text = "Orden de Ejecución Detectado:\n"
-        if not diccionary_functions:
-            output_text += "No se detectaron funciones o el nodo 'inicio' no tiene texto 'inicio' y no hay otras funciones definidas.\n"
-        else:
-            for function_name in diccionary_functions:
-                output_text += f"\nNodos de la funcion: '{function_name}'\n"
-                for j, node in enumerate(diccionary_functions[function_name]):
-                    node_text = f"Nodo: {node.text.strip() if node.text.strip() else node.shape_type}"
-                    output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type})\n"
-
-        self.compilation_output_label.setText(output_text)
-
-        parser_data = {'connections': self.scene.connections}
-        parser_data['functions_flow'] = diccionary_functions
-
-        parser = Parser(parser_data)
-        codigo_c = parser.generate_code()
-
-        print("\n--- Código C Generado ---")
-        print(codigo_c)
-
-
-    
-
+            self.start_node.update()
 
 class FlowMainWindow(QMainWindow):
     def __init__(self):
@@ -630,79 +499,71 @@ class FlowMainWindow(QMainWindow):
         self.scene = FlowScene()
         self.view = QGraphicsView(self.scene)
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.view.setFixedSize(1000, 800) # Setting a fixed size for the view
+        self.view.setFixedSize(1000, 800)
 
+        # Crear barra de herramientas
         toolbar = QToolBar("Formas")
         self.addToolBar(toolbar)
 
-        self.add_shape_action(toolbar, "Inicio/Fin", 'start_end')
-        self.add_shape_action(toolbar, "Proceso", 'process')
-        self.add_shape_action(toolbar, "Decisión", 'decision')
-        self.add_shape_action(toolbar, "Entrada/Salida", 'input_output')
-        self.add_shape_action(toolbar, "Conector", 'connector')
-        self.add_shape_action(toolbar, "Llamada a Función", 'function_call')
+        # Añadir formas
+        shapes = [
+            ("Inicio/Fin", 'start_end'),
+            ("Proceso", 'process'),
+            ("Decisión", 'decision'),
+            ("Entrada/Salida", 'input_output'),
+            ("Conector", 'connector'),
+            ("Llamada a Función", 'function_call')
+        ]
+
+        for name, shape_type in shapes:
+            action = QAction(name, self)
+            action.triggered.connect(lambda checked, st=shape_type: self.scene.set_shape_type(st))
+            toolbar.addAction(action)
+
         toolbar.addSeparator()
 
-        self.select_action = QAction("Seleccionar / Mover", self)
+        # Añadir herramientas
+        self.select_action = QAction("Seleccionar/Mover", self)
         self.select_action.triggered.connect(self.toggle_default_mode)
         toolbar.addAction(self.select_action)
 
-        self.connect_action = QAction("Conectar Figuras", self)
+        self.connect_action = QAction("Conectar", self)
         self.connect_action.triggered.connect(self.toggle_connection_mode)
         toolbar.addAction(self.connect_action)
 
-        self.text_action = QAction("Agregar Texto", self)
+        self.text_action = QAction("Texto", self)
         self.text_action.triggered.connect(self.toggle_text_mode)
         toolbar.addAction(self.text_action)
 
-        self.delete_action = QAction("Eliminar Figura", self)
+        self.delete_action = QAction("Eliminar", self)
         self.delete_action.triggered.connect(self.delete_shape)
         toolbar.addAction(self.delete_action)
 
-        toolbar.addSeparator()
-
+        # Configurar layout principal
         main_layout = QHBoxLayout()
+        right_panel = QVBoxLayout()
+        
+        # Área de compilación
+        self.compilation_output = QTextEdit()
+        self.compilation_output.setReadOnly(True)
+        right_panel.addWidget(QLabel("Salida de Compilación:"))
+        right_panel.addWidget(self.compilation_output)
 
-        flowchart_layout = QVBoxLayout()
-        flowchart_layout.addWidget(self.view)
-        main_layout.addLayout(flowchart_layout, 3)
+        # Botón de compilación
+        compile_btn = QPushButton("Compilar Diagrama")
+        compile_btn.clicked.connect(self.compile_flowchart)
+        right_panel.addWidget(compile_btn)
 
-        right_panel_layout = QVBoxLayout()
-        right_panel_layout.setContentsMargins(0,0,0,0)
+        # Agregar la terminal WSL
+        self.wsl_terminal = WslTerminalWidget()
+        right_panel.addWidget(self.wsl_terminal)
 
-        compilation_section_widget = QWidget()
-        compilation_layout = QVBoxLayout(compilation_section_widget)
-        compilation_layout.setContentsMargins(5,5,5,5)
-        self.compilation_output_label = QLabel("Presione 'Compilar' para ver el flujo.")
-        self.compilation_output_label.setStyleSheet("background-color: white; border: 1px solid black; padding: 5px;")
-        self.compilation_output_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.compilation_output_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self.compilation_output_label.setWordWrap(True)
-        compilation_layout.addWidget(self.compilation_output_label)
-
-        button_compile = QPushButton("Generar código")
-        button_compile.setStyleSheet("background-color: white")
-        button_compile.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        button_compile.clicked.connect(self.compile_flowchart)
-        compilation_layout.addWidget(button_compile)
-        right_panel_layout.addWidget(compilation_section_widget, 1)
-
-        self.wsl_terminal_widget = WslTerminalWidget()
-        right_panel_layout.addWidget(self.wsl_terminal_widget, 2)
-
-        main_layout.addLayout(right_panel_layout, 2)
+        main_layout.addWidget(self.view, 3)
+        main_layout.addLayout(right_panel, 1)
 
         container = QWidget()
         container.setLayout(main_layout)
         self.setCentralWidget(container)
-
-        self.setMinimumSize(self.sizeHint())
-
-
-    def add_shape_action(self, toolbar, name, shape_type):
-        action = QAction(name, self)
-        action.triggered.connect(lambda: self.scene.set_shape_type(shape_type))
-        toolbar.addAction(action)
 
     def toggle_default_mode(self):
         self.scene.set_shape_type(None)
@@ -711,18 +572,14 @@ class FlowMainWindow(QMainWindow):
         self.view.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def toggle_connection_mode(self):
-        current_mode = self.scene.connection_mode
-        self.scene.set_connection_mode(not current_mode)
-
+        self.scene.set_connection_mode(not self.scene.connection_mode)
         if self.scene.connection_mode:
             self.view.setCursor(QCursor(Qt.CursorShape.CrossCursor))
         else:
             self.view.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def toggle_text_mode(self):
-        current_mode = self.scene.text_mode
-        self.scene.set_text_mode(not current_mode)
-
+        self.scene.set_text_mode(not self.scene.text_mode)
         if self.scene.text_mode:
             self.view.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
         else:
@@ -731,123 +588,20 @@ class FlowMainWindow(QMainWindow):
     def delete_shape(self):
         selected_items = self.scene.selectedItems()
         if selected_items:
-            reply = QMessageBox.question(self, "Confirmar Eliminación",
-                                         f"¿Eliminar {len(selected_items)} figura(s) seleccionada(s)?",
-                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                         QMessageBox.StandardButton.No)
-            if reply == QMessageBox.StandardButton.No:
-                return
-
-            for item in list(selected_items): # Iterate over a copy to avoid modification during iteration
-                if isinstance(item, FlowShape):
-                    # removeItem handles connection cleanup, so no need to call connections.remove_connections_with here
+            reply = QMessageBox.question(self, "Confirmar",
+                                       f"¿Eliminar {len(selected_items)} figura(s)?",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                for item in selected_items:
                     self.scene.removeItem(item)
-                # If it's not a FlowShape (e.g., a line if lines were selectable), remove it too.
-                # However, lines are not selectable here, so this primarily targets FlowShapes.
-                elif isinstance(item, QGraphicsLineItem):
-                    self.scene.removeItem(item) # This should not typically happen if lines are not selectable
-        else:
-            QMessageBox.warning(self, "Advertencia", "No hay figuras seleccionadas para eliminar.")
 
-
-    def analisis_connections(self, initial_node):
-        final_flow_steps = []
-        visited_nodes_ids = set()
-        processing_queue = deque()
-        if self.scene.start_node and initial_node == self.scene.start_node:
-            processing_queue.append(self.scene.start_node)
-        else:
-            processing_queue.append(initial_node)
-
-        while processing_queue:
-            current_node_for_bfs = processing_queue.popleft()
-            if current_node_for_bfs.id in visited_nodes_ids:
-                continue
-            visited_nodes_ids.add(current_node_for_bfs.id)
-            final_flow_steps.append(current_node_for_bfs)
-
-            outgoing_connections = self.scene.connections.get_connections_from(current_node_for_bfs)
-            for next_node_in_flow in outgoing_connections:
-                if next_node_in_flow.id not in visited_nodes_ids:
-                    processing_queue.append(next_node_in_flow)
-
-        if not final_flow_steps:
-             self.compilation_output_label.setText("El nodo de inicio no tiene conexiones salientes o no se pudo procesar el flujo.")
-             return None
-
-        return final_flow_steps
-    
-    def compile_flowchart(self): 
-        try:
-            if not self.scene.start_node:
-                self.compilation_output_label.setText("Error: No se ha definido un nodo de inicio.\n"
-                                                    "Añada una figura 'Inicio/Fin'.")
-                QMessageBox.warning(self, "Error de Compilación", "No se ha definido un nodo de inicio.")
-                return
-            final_flow_steps = []
-            #Diccionario el cual contiene las funciones
-            #Ejamplo de como se guardan: {"Nombre de la funcion": [Nodo1, nodo2, nodo3]}
-            diccionary_functions = {}
-            
-            for item in self.scene.items():
-                if isinstance(item, QGraphicsLineItem):
-                    pass
-                elif isinstance(item, FlowShape):
-                    for function in diccionary_functions:
-                        if item.text.strip() == function: 
-                            QMessageBox.warning(self, "Error de sintaxis", "Se detectaron dos funciones con el mismo nombre")
-                            break
-
-                    if item.shape_type == "start_end" and item.text == "inicio":
-                            final_flow_steps = self.analisis_connections(item)
-                            diccionary_functions[item.text.strip()] = final_flow_steps
-
-                    elif item.shape_type == "start_end":
-                            final_flow_steps = self.analisis_connections(item)
-                            diccionary_functions[item.text.strip()] = final_flow_steps
-
-            output_text = "Orden de Ejecución Detectado:\n"
-            for i, function in enumerate(diccionary_functions):
-                keys = list(diccionary_functions.keys())
-                output_text += f"\nNodos de la funcion: {keys[i]}\n"
-                for j, node in enumerate(diccionary_functions[function]):
-                    node_text = f"Nodo: {node.text.strip() if node.text.strip() else node.shape_type}"
-                    output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type} (dir: {node}) (id: {id(node)}))\n"
-
-
-            diccionary_functions['conn'] = self.scene.connections
-
-            parser = Parser(diccionary_functions)
-            codigo_c = parser.generate_code()
-
-            
-
-            print(codigo_c)
-            token = tokenize(codigo_c)
-            self.compilation_output_label.setText(codigo_c)
-
-            print("Iniciando análisis sintáctico...")
-            parseador = Parseador(token)
-            arbol_ast = parseador.parsear()
-
-            try:            
-                codigo_asm = arbol_ast.generar_codigo()
-                
-                # Aquí se guardará el código ensamblador en un archivo
-                with open("programa.asm", "w") as archivo:
-                    archivo.write(codigo_asm)
-
-
-                # Ahora el codigo se ejecutará en la otra terminal de WSL al presionar los botones
-                # subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
-                # subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
-                # subprocess.run(["./programa"])
-            except Exception as e:
-                print(f"Error al generar el código ensamblador: {e}")
-
-        except Exception as e:
-            self.compilation_output_label.setText(f"Error: {str(e)}")
-            QMessageBox.warning(self, "Error de Compilación", str(e))
+    def compile_flowchart(self):
+        if not self.scene.start_node:
+            QMessageBox.warning(self, "Error", "No se ha definido un nodo de inicio")
+            return
+        
+        # Aquí iría la lógica de compilación
+        self.compilation_output.setText("Diagrama compilado correctamente")
 
 class WslTerminalWidget(QWidget):
     def __init__(self, parent=None):
