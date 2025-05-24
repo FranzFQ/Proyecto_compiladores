@@ -733,11 +733,6 @@ class FlowMainWindow(QMainWindow):
                 with open("programa.asm", "w") as archivo:
                     archivo.write(codigo_asm)
 
-
-                # Ahora el codigo se ejecutará en la otra terminal de WSL al presionar los botones
-                # subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
-                # subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
-                # subprocess.run(["./programa"])
             except Exception as e:
                 print(f"Error al generar el código ensamblador: {e}")
 
@@ -818,7 +813,7 @@ class WslTerminalWidget(QWidget):
 
     def link_asm(self):
         self.output_area.append("> Enlazando programa.o con LD...")
-        command = "ld -m elf_i386 -o programa programa.o"
+        command = "gcc -m32 -no-pie programa.o -o programa"
         self.process.write((command + '\n').encode('utf-8'))
 
     def run_program(self):

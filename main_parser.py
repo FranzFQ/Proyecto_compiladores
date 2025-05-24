@@ -3,8 +3,11 @@ import subprocess
 from analizador import *
 
 texto = """
-
-
+float main() {
+    float a;
+    inputNum(a);
+    print(a);
+}
 
 """
 
@@ -345,9 +348,9 @@ def imprimir_ast(nodo):
 
 #  Aquí se prueba
 try:
-    # parseando = Parseador(token)
-    # arbol_ast = parseando.parsear()
-    # # print(arbol_ast)
+    parseando = Parseador(token)
+    arbol_ast = parseando.parsear()
+    # print(arbol_ast)
 
     # # # print(arbol_ast)
     # # # analizador_semantico = AnalizadorSemantico()
@@ -366,13 +369,13 @@ try:
     # # #     print(f"{llave}:{valor}")
 
 
-    # codigo_asm = arbol_ast.generar_codigo()
-    # with open("programa.asm", "w") as archivo:
-    #     archivo.write(codigo_asm)
+    codigo_asm = arbol_ast.generar_codigo()
+    with open("programa.asm", "w") as archivo:
+        archivo.write(codigo_asm)
 
-    # subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
-    # subprocess.run(["ld", "-m", "elf_i386", "-o", "programa", "programa.o"])
-    # subprocess.run(["./programa"])
+    subprocess.run(["nasm", "-f", "elf32", "programa.asm", "-o", "programa.o"])
+    subprocess.run(["gcc", "-m32", "-no-pie", "programa.o", "-o", "programa"])
+    subprocess.run(["./programa"])
 
     # # print('Análisis sintáctico exitoso')
     # # print(json.dumps(imprimir_ast(arbol_ast), indent=1))

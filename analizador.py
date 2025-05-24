@@ -58,13 +58,15 @@ class NodoPrograma(NodoAST):
 
         # Sección de datos (incluye variables detectadas)
         codigo.append("section .data")
+        codigo.append("   fmt_float db 'Resultado: %f', 10, 0")
+        codigo.append("   fmt_in_float db '%lf', 0")
         for var, tipo in self.variables.items():
             # Se debe implementar que dependiendo del tipo de variable se reserve el espacio necesario
             
             if tipo == 'int':
                 codigo.append(f"   {var} dd 0")
             elif tipo == 'float':
-                codigo.append(f"   {var} dd 0.0")
+                codigo.append(f"   {var} dq 0.0")
             elif tipo == 'str':
                 # Reservar espacio para una cadena de caracteres
                 # Verificar que la cadena no exista en la tabla de cadenas
@@ -87,15 +89,18 @@ class NodoPrograma(NodoAST):
         
         # Sección de código
         codigo.append("section .text")
-        codigo.append("   global _start")
+        codigo.append("   extern printf")
+        codigo.append("   extern scanf")
+        codigo.append("   global main")
         
         for funcion in self.funciones:
             if funcion.nombre[1] == 'main':
                 # Convertimos main en _start
-                codigo.append("_start:")
+                codigo.append("main:")
                 for instruccion in funcion.cuerpo:
                     codigo.append(instruccion.generar_codigo())
-                codigo.append("   call quit")  # sys_exit
+                codigo.append("   mov eax, 0")  # sys_exit
+                codigo.append("   ret")
             else:
                 codigo.append(funcion.generar_codigo())    
         # Función para imprimir un numero
@@ -279,8 +284,18 @@ class NodoNumero(NodoAST):
         return str(self.valor)
     
     def generar_codigo(self):
+        if isinstance(self.valor, float):
+            nombre_const = f"const_float_{str(self.valor).replace('.', '_')}"
+            return f"   fld qword [{nombre_const}]\n" \
+                f"   sub esp, 8\n" \
+                f"   fstp qword [esp]\n" \
+                f"   push fmt_float\n" \
+                f"   call printf\n" \
+                f"   add esp, 12"
         return f'   mov eax, {self.valor} ; Cargar número {self.valor} en eax'
-    
+
+
+
 class NodoDeclaracionVariable(NodoAST):
     def __init__(self, nombre, tipo):
         self.nombre = nombre
@@ -402,6 +417,11 @@ class NodoInput(NodoAST):
         elif self.variable.tipo == 'str':
             codigo.append(f'   mov eax, {self.variable.nombre[1]} ; Cargar dirección de la variable en eax')
             codigo.append(f'   call inputStr')
+        elif self.variable.tipo == 'float':
+            codigo.append(f'   push {self.variable.nombre[1]}')
+            codigo.append(f'   push fmt_in_float')
+            codigo.append(f'   call scanf')
+            codigo.append(f'   add esp, 8')
         else:
             raise Exception(f"Error: Tipo de variable '{self.variable.nombre[1]}' no soportado en input")
 
@@ -417,9 +437,10 @@ class NodoPrint(NodoAST):
     def generar_codigo(self):
         codigo = []
         # Cargar la variable en eax
-        codigo.append(self.variable.generar_codigo())
         
         # Determinar el tipo de variable para llamar a la función correcta
+        if self.variable.tipo != 'float':
+            codigo.append(self.variable.generar_codigo())
         if isinstance(self.variable, NodoIdentificador):
             # print(f"Generando código para print: {self.variable.nombre[1]} de tipo {self.variable.tipo}")
             # Verificar si es una cadena (comienza con "cadena_")
@@ -431,6 +452,14 @@ class NodoPrint(NodoAST):
             elif self.variable.tipo == 'int':
                 # Si es un entero, llamar a la función de impresión de enteros
                 codigo.append('   call printnum')
+            elif self.variable.tipo == 'float':
+                codigo.append(f'   fld qword [{self.variable.nombre[1]}]')  # Cargar el double
+                codigo.append(f'   sub esp, 8')                              # Reservar espacio
+                codigo.append(f'   fstp qword [esp]')                        # Guardar en la pila
+                codigo.append(f'   push fmt_float')
+                codigo.append(f'   call printf')
+                codigo.append(f'   add esp, 12')  # 8 del valor + 4 del puntero
+
         elif isinstance(self.variable, NodoCadena):
             # Para cadenas directas (aunque normalmente se convierten a identificadores)
             codigo.append('   call printStr')
