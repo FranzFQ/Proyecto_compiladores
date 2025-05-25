@@ -100,14 +100,15 @@ class ConnectionList:
         prev = None
         while current:
             if current.from_item == item_to_remove or current.to_item == item_to_remove:
+                # Eliminar los elementos gráficos de la escena
                 if isinstance(current.line_item, tuple):
                     for item in current.line_item:
-                        if item.scene():
+                        if item and item.scene():
                             item.scene().removeItem(item)
-                else:
-                    if current.line_item.scene():
-                        current.line_item.scene().removeItem(current.line_item)
+                elif current.line_item and current.line_item.scene():
+                    current.line_item.scene().removeItem(current.line_item)
 
+                # Eliminar el nodo de la lista
                 if prev:
                     prev.next = current.next
                 else:
@@ -589,11 +590,18 @@ class FlowMainWindow(QMainWindow):
         selected_items = self.scene.selectedItems()
         if selected_items:
             reply = QMessageBox.question(self, "Confirmar",
-                                       f"¿Eliminar {len(selected_items)} figura(s)?",
-                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                                    f"¿Eliminar {len(selected_items)} figura(s)?",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if reply == QMessageBox.StandardButton.Yes:
                 for item in selected_items:
+                    # Eliminar todas las conexiones asociadas a este ítem
+                    self.scene.connections.remove_connections_with(item)
+                    # Eliminar el ítem de la escena
                     self.scene.removeItem(item)
+                    
+                    # Si era el nodo de inicio, limpiar la referencia
+                    if hasattr(self.scene, 'start_node') and self.scene.start_node == item:
+                        self.scene.start_node = None
 
     def compile_flowchart(self):
         if not self.scene.start_node:
