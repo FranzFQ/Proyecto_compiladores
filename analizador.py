@@ -8,7 +8,7 @@ import re
 token_patron = {
     "KEYWORD": r'\b(if|else|while|for|return|int|str|float|void|class|def|print|inputStr|inputNum)\b',
     "IDENTIFIER": r'\b[a-zA-Z_][a-zA-Z0-9_]*\b',
-    "NUMBER": r'\b\d+\b',
+    "NUMBER": r'\b\d+(\.\d+)?\b',
     "OPERATOR": r'<=|>=|==|!=|&&|"|[\+\-\*/=<>\!\||\|\']',
     "DELIMITER": r'[(),;{}]',  # Paréntesis, llaves, punto y coma
     "WHITESPACE": r'\s+'  # Espacios en blanco
@@ -51,6 +51,7 @@ class NodoPrograma(NodoAST):
 
         self.variables = self.analizador_semantico.tabla_simbolos.variables  # Resetear variables
         self.cadenas = self.analizador_semantico.tabla_simbolos.cadenas  # Resetear cadenas
+        self.flotantes = self.analizador_semantico.tabla_simbolos.flotantes
 
         codigo = []
         # Para agregar las funciones de imprimir = %include 'funciones.asm'
@@ -66,7 +67,8 @@ class NodoPrograma(NodoAST):
             if tipo == 'int':
                 codigo.append(f"   {var} dd 0")
             elif tipo == 'float':
-                codigo.append(f"   {var} dq 0.0")
+                if var not in self.flotantes:
+                    codigo.append(f"   {var} dq 0.0")
             elif tipo == 'str':
                 # Reservar espacio para una cadena de caracteres
                 # Verificar que la cadena no exista en la tabla de cadenas
@@ -79,6 +81,8 @@ class NodoPrograma(NodoAST):
         for nombre, valor in self.cadenas.items():
             # Reservar espacio para la cadena
             codigo.append(f"   {nombre} db '{valor}', 0")
+        for nombre, valor in self.flotantes.items():
+            codigo.append(f"   {nombre} dq  {valor}")
         codigo.append("   signo_menos db '-'")
         codigo.append("   charr db 12 dup(0)")  # Buffer para número convertido
           
@@ -160,7 +164,11 @@ class NodoAsignacion(NodoAST):
 
     def generar_codigo(self):
         codigo = self.expresion.generar_codigo()
-        codigo += f'\n   mov [{self.nombre[1]}], eax; Guardar resultado en {self.nombre[1]}'
+        if hasattr(self.expresion, 'tipo') and self.expresion.tipo == 'float':
+
+            codigo += f'\n   fstp qword [{self.nombre[1]}] ; Guardar float en {self.nombre[1]}'
+        else:
+            codigo += f'\n   mov [{self.nombre[1]}], eax ; Guardar entero en {self.nombre[1]}'
         return codigo
     
 class NodoAsignacionCadena(NodoAST):
@@ -180,6 +188,7 @@ class NodoOperacion(NodoAST):
         self.izquierda = izquierda
         self.operador = operador
         self.derecha = derecha
+        self.tipo = None
 
     def optimizar(self):
         if isinstance(self.izquierda, NodoOperacion):
@@ -217,31 +226,59 @@ class NodoOperacion(NodoAST):
         return f"{self.izquierda.traducir()} {self.operador[1]} {self.derecha.traducir()}"
         
     def generar_codigo(self):
-        codigo = []
-        codigo.append(self.izquierda.generar_codigo()) # Cargar el operando izquierdo
-        codigo.append('   push eax; guardar en la pila') # Guardar en la pila
-        codigo.append(self.derecha.generar_codigo()) # Cargar el operando derecho
-        codigo.append('   pop ebx; recuperar el primer operando') # Sacar de la pila
-        # ebx = op1 y eax = op2
-        if self.operador[1] == '+':
-            codigo.append('   add eax, ebx; eax = eax + ebx')
-        elif self.operador[1] == '-':
-            codigo.append('   sub ebx, eax; ebx = ebx - eax')
-            codigo.append('   mov eax, ebx; eax = ebx')
-        elif self.operador[1] == '*':
-            codigo.append('   imul ebx; eax = eax * ebx')
-        elif self.operador[1] == '/':
-            codigo.append('   mov edx, 0; limpiar edx')
-            codigo.append('   idiv ebx; eax = eax / ebx')
-        elif self.operador[1] == '<':
-            codigo.append('   cmp eax, ebx; comparar eax y ebx')
-            codigo.append('   mov eax, 0; cargar 0 en eax')
-            codigo.append('   setl al; eax = eax < ebx')
-        elif self.operador[1] == '>':
-            codigo.append('   cmp eax, ebx; comparar eax y ebx')
-            codigo.append('   mov eax, 0; cargar 0 en eax')
-            codigo.append('   setg al; eax = eax > ebx')
-        return '\n'.join(codigo)
+        if self.tipo == 'float':
+            print("El tipo es flotante")
+            print(self.izquierda.generar_codigo())
+            codigo = []
+            codigo.append(self.izquierda.generar_codigo())
+            codigo.append(self.derecha.generar_codigo())
+
+
+
+            if self.operador[1] == '+':
+                codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+            elif self.operador[1] == '-':
+                codigo.append('   fsubp st1, st0')
+            elif self.operador[1] == '*':
+                codigo.append('   fmulp st1, st0')
+            elif self.operador[1] == '/':
+                codigo.append('   fdivp st1, st0')
+
+            # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
+            codigo.append('   sub esp, 8')
+            codigo.append('   fstp qword [esp]')
+            codigo.append('   pop eax')  # Simulación, aunque en floats no se usa eax directamente
+            return '\n'.join(codigo)
+        elif isinstance(self.izquierda, NodoOperacion):
+            print("hola mundo")
+        else:
+            codigo = []
+            print("Aquí no debería entrar")
+
+            codigo.append(self.izquierda.generar_codigo()) # Cargar el operando izquierdo
+            codigo.append('   push eax; guardar en la pila') # Guardar en la pila
+            codigo.append(self.derecha.generar_codigo()) # Cargar el operando derecho
+            codigo.append('   pop ebx; recuperar el primer operando') # Sacar de la pila
+            # ebx = op1 y eax = op2
+            if self.operador[1] == '+':
+                codigo.append('   add eax, ebx; eax = eax + ebx')
+            elif self.operador[1] == '-':
+                codigo.append('   sub ebx, eax; ebx = ebx - eax')
+                codigo.append('   mov eax, ebx; eax = ebx')
+            elif self.operador[1] == '*':
+                codigo.append('   imul ebx; eax = eax * ebx')
+            elif self.operador[1] == '/':
+                codigo.append('   mov edx, 0; limpiar edx')
+                codigo.append('   idiv ebx; eax = eax / ebx')
+            elif self.operador[1] == '<':
+                codigo.append('   cmp eax, ebx; comparar eax y ebx')
+                codigo.append('   mov eax, 0; cargar 0 en eax')
+                codigo.append('   setl al; eax = eax < ebx')
+            elif self.operador[1] == '>':
+                codigo.append('   cmp eax, ebx; comparar eax y ebx')
+                codigo.append('   mov eax, 0; cargar 0 en eax')
+                codigo.append('   setg al; eax = eax > ebx')
+            return '\n'.join(codigo)
 
 class NodoRetorno(NodoAST):
     # Nodo que representa a la sentencia return
@@ -265,15 +302,17 @@ class NodoIdentificador(NodoAST):
         return self.nombre[1]
 
     def generar_codigo(self):
+        print(self.tipo)
         if self.tipo == 'int':
             return f'   mov eax, [{self.nombre[1]}] ; Cargar variable {self.nombre[1]} en eax'
         elif self.tipo == 'float':
-            return f'   mov eax, [{self.nombre[1]}] ; Cargar variable {self.nombre[1]} en eax'
+            return f'   fld qword [{self.nombre[1]}] ; Cargar float {self.nombre[1]} en FPU'
         elif self.tipo == 'str':
             return f'   mov eax, {self.nombre[1]} ; Cargar variable {self.nombre[1]} en eax'
         elif self.tipo == 'char':
             return f'   mov eax, [{self.nombre[1]}] ; Cargar variable {self.nombre[1]} en eax'
         else:
+            
             return f'   mov eax, [{self.nombre[1]}] ; Cargar variable {self.nombre[1]} en eax'
 
 class NodoNumero(NodoAST):
@@ -286,12 +325,8 @@ class NodoNumero(NodoAST):
     def generar_codigo(self):
         if isinstance(self.valor, float):
             nombre_const = f"const_float_{str(self.valor).replace('.', '_')}"
-            return f"   fld qword [{nombre_const}]\n" \
-                f"   sub esp, 8\n" \
-                f"   fstp qword [esp]\n" \
-                f"   push fmt_float\n" \
-                f"   call printf\n" \
-                f"   add esp, 12"
+            print(nombre_const)
+            return f"   fld qword [{nombre_const}] ; Cargar float {self.valor} en ST0" 
         return f'   mov eax, {self.valor} ; Cargar número {self.valor} en eax'
 
 
@@ -312,8 +347,8 @@ class NodoWhile(NodoAST):
         self.cuerpo = cuerpo
 
     def generar_codigo(self):
-        etiqueta_inicio = f'etiqueta_inicio'
-        etiqueta_fin = f'etiqueta_fin_while'
+        etiqueta_inicio = f'etiqueta_inicio_{id(self)}'
+        etiqueta_fin = f'etiqueta_fin_while_{id(self)}'
 
         codigo = []
         codigo.append(f'{etiqueta_inicio}:')
@@ -337,8 +372,8 @@ class NodoIf(NodoAST):
         self.sino = sino
 
     def generar_codigo(self):
-        etiqueta_else = f'etiqueta_else'
-        etiqueta_fin = f'etiqueta_fin_if'
+        etiqueta_else = f'etiqueta_else_{id(self)}'
+        etiqueta_fin = f'etiqueta_fin_if_{id(self)}'
 
         codigo = []
         codigo.append(self.condicion.generar_codigo())
@@ -520,7 +555,12 @@ class TablaSimbolos:
         self.variables = {} # Almacena variables {nombre: tipo}
         self.funciones = {} # Almacena funciones {nombre: (tipo_retorno, [parametros])}
         self.cadenas = {} # Almacena cadenas {nombre: valor}
+        self.flotantes = {}
 
+    def declarar_flotante(self, nombre, valor):
+        if nombre in self.flotantes:
+            raise Exception(f"Error: Numero '{nombre}' ya declarado")
+        self.flotantes[nombre] = valor
     def declarar_cadena(self, nombre, valor):
         if nombre in self.cadenas:
             raise Exception(f"Error: Cadena '{nombre}' ya declarada")
@@ -554,7 +594,6 @@ class AnalizadorSemantico:
         self.contador_cadenas = 0
     def analizar(self, nodo):
         if isinstance(nodo, NodoAsignacion):
-
             tipo_expr = self.analizar(nodo.expresion)
             # Verificar si la variable ya existe (puede ser un parámetro)
             if nodo.nombre[1] not in self.tabla_simbolos.variables:
@@ -586,6 +625,18 @@ class AnalizadorSemantico:
                 else:
                     raise Exception(f"Error: Tipo de variable '{nodo.variable.nombre[1]}' no soportado en print")            
 
+        elif isinstance(nodo, NodoNumero):
+            # Comprobar si el número es entero o decimal
+            if isinstance(nodo.valor, int):
+                return "int"
+            elif isinstance(nodo.valor, float):
+                const_float = f"const_float_{str(nodo.valor).replace('.', '_')}"
+                self.tabla_simbolos.declarar_flotante(const_float, nodo.valor)
+                self.tabla_simbolos.declarar_variable(const_float, 'float')
+                return "float"
+            return "int"  # Por defecto, consideramos que es un entero
+
+
         elif isinstance(nodo, NodoPrintList): # NodoPrintList es una lista que contiene varios NodoPrint
             for variablePrint in nodo.variables:
                 self.analizar(variablePrint)
@@ -599,13 +650,7 @@ class AnalizadorSemantico:
             self.tabla_simbolos.declarar_variable(nodo.nombre[1], nodo.tipo)
         elif isinstance(nodo, NodoIdentificador):
             return self.tabla_simbolos.obtener_tipo_variable(nodo.nombre[1])
-        elif isinstance(nodo, NodoNumero):
-            # Comprobar si el número es entero o decimal
-            if isinstance(nodo.valor, int):
-                return "int"
-            elif isinstance(nodo.valor, float):
-                return "float"
-            return "int"  # Por defecto, consideramos que es un entero
+
         elif isinstance(nodo, NodoCadena):
             return "str"
         elif isinstance(nodo, NodoAsignacionCadena):
@@ -617,9 +662,15 @@ class AnalizadorSemantico:
         elif isinstance(nodo, NodoOperacion):
             tipo_izq = self.analizar(nodo.izquierda)
             tipo_der = self.analizar(nodo.derecha)
-            if tipo_izq != tipo_der:
-                raise Exception(f"Error: Tipos incompatibles {tipo_izq} {nodo.operador[1]} {tipo_der}")
-            return tipo_izq
+            if tipo_izq == tipo_der:
+                nodo.tipo = tipo_izq
+                return tipo_izq
+            elif 'float' in [tipo_izq, tipo_der] and 'int' in [tipo_izq, tipo_der]:
+                nodo.tipo = 'float'
+                return 'float'
+            else:
+                raise Exception(f"Error: Tipos incompatibles en operación: {tipo_izq} {nodo.operador[1]} {tipo_der}")
+
         elif isinstance(nodo, NodoFuncion):
             # Registrar la función en la tabla de símbolos
             self.tabla_simbolos.declarar_funcion(nodo.nombre[1], nodo.tipo_retorno[1], nodo.parametros)

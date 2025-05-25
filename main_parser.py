@@ -3,10 +3,22 @@ import subprocess
 from analizador import *
 
 texto = """
-float main() {
-    float a;
-    inputNum(a);
-    print(a);
+int main() {
+    float a = 10.0;
+    float b = 3.3;
+
+    float c = a * b;
+    float d = a / b;
+    float e = a + b;
+    float f = a - b;
+
+
+
+    print(c);
+    print(d);
+    print(e);
+    print(f);
+
 }
 
 """
@@ -152,18 +164,24 @@ class Parseador:
 
     def expresion(self):
         izquierda = self.termino()
+
         while self.obtener_token_actual() and self.obtener_token_actual()[0] == "OPERATOR":
             operador = self.coincidir("OPERATOR")
             derecha = self.termino()
             izquierda = NodoOperacion(izquierda, operador, derecha)
-        return izquierda
+        return izquierda # ((terminoiz, op, der)iz, op, der,)iz, op, der
 
     def termino(self):
         token = self.obtener_token_actual()
+        
         if token[0] == "IDENTIFIER":
-            return NodoIdentificador(self.coincidir("IDENTIFIER"), 'None')
+            return NodoIdentificador(self.coincidir("IDENTIFIER"), 'float')
         elif token[0] == "NUMBER":
-            return NodoNumero(int(self.coincidir("NUMBER")[1]))
+            numero = self.coincidir("NUMBER")[1]
+            if '.' in numero:
+                return NodoNumero(float(numero))
+            else:
+                return NodoNumero(int(numero))
         elif token[1] == '"': # Si es una cadena
             self.coincidir("OPERATOR")
             cadena = []
@@ -358,10 +376,6 @@ try:
 
     # # # analisis = analizador_semantico.analizar(arbol_ast)
 
-    # # # print("Variables")
-    # # # for llave in (analizador_semantico.tabla_simbolos.variables.keys()):
-    # # #     valor = analizador_semantico.tabla_simbolos.variables.get(llave)
-    # # #     print(f"{llave}:{valor}")
 
     # # # print("\nFunciones")
     # # # for llave in (analizador_semantico.tabla_simbolos.funciones.keys()):
@@ -370,6 +384,14 @@ try:
 
 
     codigo_asm = arbol_ast.generar_codigo()
+    # print("Variables")
+    # for llave in (arbol_ast.analizador_semantico.tabla_simbolos.variables.keys()):
+    #     valor = arbol_ast.analizador_semantico.tabla_simbolos.variables.get(llave)
+    #     print(f"{llave}:{valor}")
+
+
+
+
     with open("programa.asm", "w") as archivo:
         archivo.write(codigo_asm)
 
