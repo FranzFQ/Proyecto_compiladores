@@ -8,7 +8,7 @@ import re
 token_patron = {
     "KEYWORD": r'\b(if|else|while|for|return|int|str|float|void|class|def|print|inputStr|inputNum)\b',
     "IDENTIFIER": r'\b[a-zA-Z_][a-zA-Z0-9_]*\b',
-    "NUMBER": r'\b\d+\b',
+    "NUMBER": r'-?\b\d+\b',
     "OPERATOR": r'<=|>=|==|!=|&&|"|[\+\-\*/=<>\!\||\|\']',
     "DELIMITER": r'[(),;{}]',  # Paréntesis, llaves, punto y coma
     "WHITESPACE": r'\s+'  # Espacios en blanco
