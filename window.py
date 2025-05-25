@@ -423,12 +423,7 @@ class FlowScene(QGraphicsScene):
                         click_pos = item_at_click.mapFromScene(event.scenePos())
                         rect = item_at_click.boundingRect()
                         
-                        # Solo permitir comenzar conexiones desde derecha o abajo
-                        if not (click_pos.x() >= rect.right() - 10 or click_pos.y() >= rect.bottom() - 10):
-                            QMessageBox.warning(self.views()[0], "Error", 
-                                            "En decisiones, las conexiones salientes deben comenzar desde la derecha o abajo")
-                            return
-                    
+                        
                     self.first_item = item_at_click
                     self.first_item.set_as_start_connector(True)
                 else:
@@ -437,13 +432,6 @@ class FlowScene(QGraphicsScene):
                         click_pos = item_at_click.mapFromScene(event.scenePos())
                         rect = item_at_click.boundingRect()
                         
-                        # Solo permitir conexiones entrantes por izquierda o arriba
-                        if not (click_pos.x() <= rect.left() + 10 or click_pos.y() <= rect.top() + 10):
-                            QMessageBox.warning(self.views()[0], "Error",
-                                            "En decisiones, las conexiones entrantes deben llegar por arriba o izquierda")
-                            self.first_item.set_as_start_connector(False)
-                            self.first_item = None
-                            return
                     
                     # Crear la conexión
                     self.connections.create_connection(self.first_item, item_at_click, self)
