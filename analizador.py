@@ -661,7 +661,7 @@ class NodoPrint(NodoAST):
         
         # Determinar el tipo de variable para llamar a la función correcta
         if self.variable.tipo != 'float':
-            codigo.append(self.variable.generar_codigo())
+            codigo.append(self.variable.generar_codigo(vars))
         if isinstance(self.variable, NodoIdentificador):
             # print(f"Generando código para print: {self.variable.nombre[1]} de tipo {self.variable.tipo}")
             # Verificar si es una cadena (comienza con "cadena_")
