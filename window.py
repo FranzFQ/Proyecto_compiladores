@@ -6,13 +6,13 @@ import math
 import uuid
 from collections import deque
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsItem,
+     QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsItem,
     QGraphicsLineItem, QGraphicsPolygonItem, QToolBar, QVBoxLayout, QWidget, 
     QInputDialog, QLineEdit, QMessageBox, QHBoxLayout, QLabel, QSizePolicy, 
     QPushButton, QTextEdit, QGraphicsSimpleTextItem # Importar QGraphicsSimpleTextItem
 )
 from PyQt6.QtGui import (
-    QPolygonF, QPen, QColor, QAction, QPainter, QCursor, QFont, QBrush, QFontMetrics
+    QIcon, QPolygonF, QPen, QColor, QAction, QPainter, QCursor, QFont, QBrush, QFontMetrics
 )
 from PyQt6.QtCore import Qt, QPointF, QRectF, QLineF, QRect, QProcess
 
@@ -376,10 +376,20 @@ class FlowScene(QGraphicsScene):
         self.selected_shape = None
         self.connection_mode = False
         self.text_mode = False
+        self.delete_mode = False 
+
         self.first_item = None
         self._temp_line = None
         self.connections = ConnectionList()
         self.start_node = None
+
+    def set_delete_mode(self, enabled):
+            self.delete_mode = enabled
+            if enabled:
+                self.set_shape_type(None)
+                self.set_connection_mode(False)
+                self.set_text_mode(False)
+
 
     def set_shape_type(self, shape_type):
         self.selected_shape = shape_type
@@ -409,6 +419,17 @@ class FlowScene(QGraphicsScene):
     def mousePressEvent(self, event):
         item_at_click = self.itemAt(event.scenePos(), self.views()[0].transform())
 
+        if self.delete_mode and isinstance(item_at_click, FlowShape):
+            reply = QMessageBox.question(
+                self.views()[0], 
+                "Confirmar eliminación",
+                f"¿Eliminar esta figura ({item_at_click.shape_type})?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.removeItem(item_at_click)
+            return
+        
         if self.selected_shape:
             shape = FlowShape(self.selected_shape)
             shape.setPos(event.scenePos() - shape.boundingRect().center())
@@ -625,78 +646,178 @@ class FlowMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Editor de Diagramas de Flujo")
-        self.setStyleSheet("background-color: #CEE9F5")
+        self.setStyleSheet("background-color: #0077B6")
 
+        # Configuración inicial de la escena y vista
         self.scene = FlowScene()
         self.view = QGraphicsView(self.scene)
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.view.setFixedSize(1000, 800)
+        self.view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self.compilation_output = QTextEdit()
+        # Configurar barra de herramientas (tu código existente)
+        toolbar = self.setup_toolbar()
 
-        # Crear barra de herramientas
-        toolbar = QToolBar("Formas")
-        self.addToolBar(toolbar)
-
-        # Añadir formas
-        shapes = [
-            ("Inicio/Fin", 'start_end'),
-            ("Proceso", 'process'),
-            ("Decisión", 'decision'),
-            ("Entrada/Salida", 'input_output'),
-            ("Conector", 'connector'),
-            ("Llamada a Función", 'function_call')
-        ]
-
-        for name, shape_type in shapes:
-            action = QAction(name, self)
-            action.triggered.connect(lambda checked, st=shape_type: self.scene.set_shape_type(st))
-            toolbar.addAction(action)
-
-        toolbar.addSeparator()
-
-        # Añadir herramientas
-        self.select_action = QAction("Seleccionar/Mover", self)
-        self.select_action.triggered.connect(self.toggle_default_mode)
-        toolbar.addAction(self.select_action)
-
-        self.connect_action = QAction("Conectar", self)
-        self.connect_action.triggered.connect(self.toggle_connection_mode)
-        toolbar.addAction(self.connect_action)
-
-        self.text_action = QAction("Texto", self)
-        self.text_action.triggered.connect(self.toggle_text_mode)
-        toolbar.addAction(self.text_action)
-
-        self.delete_action = QAction("Eliminar", self)
-        self.delete_action.triggered.connect(self.delete_shape)
-        toolbar.addAction(self.delete_action)
-
-        # Configurar layout principal
+        # Configurar paneles principales
         main_layout = QHBoxLayout()
-        right_panel = QVBoxLayout()
-        
-        # Área de compilación
-        self.compilation_output = QTextEdit()
-        self.compilation_output.setReadOnly(True)
-        right_panel.addWidget(QLabel("Salida de Compilación:"))
-        right_panel.addWidget(self.compilation_output)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(10)
 
-        # Botón de compilación
-        compile_btn = QPushButton("Compilar Diagrama")
-        compile_btn.clicked.connect(self.compile_flowchart)
-        right_panel.addWidget(compile_btn)
+        # Panel izquierdo (editor)
+        left_panel = QVBoxLayout()
+        left_panel.addWidget(self.view)
+        left_panel_widget = QWidget()
+        left_panel_widget.setLayout(left_panel)
 
-        # Agregar la terminal WSL
-        self.wsl_terminal = WslTerminalWidget()
-        right_panel.addWidget(self.wsl_terminal)
+        # Panel derecho (compilación)
+        right_panel = self.setup_right_panel()
 
-        main_layout.addWidget(self.view, 3)
-        main_layout.addLayout(right_panel, 1)
+        # Asignar proporciones
+        main_layout.addWidget(left_panel_widget, 2)  # 2/3
+        main_layout.addWidget(right_panel, 1)        # 1/3
 
         container = QWidget()
         container.setLayout(main_layout)
         self.setCentralWidget(container)
+
+    def setup_right_panel(self):
+        """Configura el panel derecho con compilación y terminal"""
+        panel = QVBoxLayout()
+        panel.setSpacing(5)
+
+        # Área de compilación
+        self.compilation_output = QTextEdit()
+        self.compilation_output.setStyleSheet("""
+            QTextEdit {
+                background-color: white;
+                border: 1px solid #ccc;
+                padding: 5px;
+                font-family: Consolas, monospace;
+                font-size: 10pt;
+            }
+        """)
+        self.compilation_output.setReadOnly(True)
+
+        # Botón de compilación
+        compile_btn = QPushButton("Compilar Diagrama")
+        compile_btn.clicked.connect(self.compile_flowchart)
+
+        # Terminal WSL
+        self.wsl_terminal = WslTerminalWidget()
+
+        # Añadir widgets al panel derecho
+        panel.addWidget(QLabel("Salida de Compilación:"))
+        panel.addWidget(self.compilation_output)
+        panel.addWidget(compile_btn)
+        panel.addWidget(self.wsl_terminal)
+
+        # Configurar proporciones internas
+        panel.setStretch(1, 1)  # compilation_output
+        panel.setStretch(3, 2)  # wsl_terminal
+
+        panel_widget = QWidget()
+        panel_widget.setLayout(panel)
+        return panel_widget
+    
+    
+    def setup_toolbar(self):
+            """Configura la barra de herramientas (tu código existente)"""
+
+            toolbar = QToolBar("Formas")
+            self.addToolBar(toolbar)
+
+            # Añadir formas
+            shapes = [
+                ("Inicio/Fin", 'start_end'),
+                ("Proceso", 'process'),
+                ("Decisión", 'decision'),
+                ("Entrada/Salida", 'input_output'),
+                ("Conector", 'connector'),
+                ("Llamada a Función", 'function_call')
+            ]
+
+            for name, shape_type in shapes:
+                action = QAction(name, self)
+                action.triggered.connect(lambda checked, st=shape_type: self.scene.set_shape_type(st))
+                toolbar.addAction(action)
+
+            toolbar.addSeparator()
+
+            # Configurar acciones con íconos y estado checkable
+            self.select_action = QAction("Seleccionar", self)
+            self.select_action.setCheckable(True)
+            self.select_action.setChecked(True)  # Modo por defecto
+            self.select_action.setIcon(QIcon.fromTheme("cursor-arrow"))
+            self.select_action.triggered.connect(self.set_default_mode)
+            
+            self.connect_action = QAction("Conectar", self)
+            self.connect_action.setCheckable(True)
+            self.connect_action.setIcon(QIcon.fromTheme("draw-connector"))
+            self.connect_action.triggered.connect(self.set_connection_mode)
+            
+            self.text_action = QAction("Texto", self)
+            self.text_action.setCheckable(True)
+            self.text_action.setIcon(QIcon.fromTheme("accessories-text-editor"))
+            self.text_action.triggered.connect(self.set_text_mode)
+            
+            self.delete_action = QAction("Eliminar", self)
+            self.delete_action.setCheckable(True)
+            self.delete_action.setIcon(QIcon.fromTheme("edit-delete"))
+            self.delete_action.triggered.connect(self.set_delete_mode)
+
+            # Agregar acciones a la barra de herramientas
+            toolbar.addAction(self.select_action)
+            toolbar.addAction(self.connect_action)
+            toolbar.addAction(self.text_action)
+            toolbar.addAction(self.delete_action)
+
+
+
+
+
+            # ... (resto de tu configuración de toolbar)
+            return toolbar
+
+
+    def set_default_mode(self):
+        """Activa el modo selección/movimiento"""
+        self._reset_modes()
+        self.select_action.setChecked(True)
+        self.scene.set_shape_type(None)
+        self.view.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+
+    def set_connection_mode(self):
+        """Activa el modo conexión"""
+        self._reset_modes()
+        self.connect_action.setChecked(True)
+        self.scene.set_connection_mode(True)
+        self.view.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+
+    def set_text_mode(self):
+        """Activa el modo texto"""
+        self._reset_modes()
+        self.text_action.setChecked(True)
+        self.scene.set_text_mode(True)
+        self.view.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
+
+    def set_delete_mode(self):
+        """Activa el modo eliminación"""
+        self._reset_modes()
+        self.delete_action.setChecked(True)
+        self.scene.set_delete_mode(True)
+        self.view.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+    def _reset_modes(self):
+        """Desactiva todos los modos y desmarca los botones"""
+        self.select_action.setChecked(False)
+        self.connect_action.setChecked(False)
+        self.text_action.setChecked(False)
+        self.delete_action.setChecked(False)
+        self.scene.set_connection_mode(False)
+        self.scene.set_text_mode(False)
+        self.scene.set_delete_mode(False)
+
+
+
 
     def add_shape_action(self, toolbar, name, shape_type):
         action = QAction(name, self)
@@ -739,6 +860,20 @@ class FlowMainWindow(QMainWindow):
                     # Si era el nodo de inicio, limpiar la referencia
                     if hasattr(self.scene, 'start_node') and self.scene.start_node == item:
                         self.scene.start_node = None
+
+    def toggle_delete_mode(self):
+        self.scene.delete_mode = not self.scene.delete_mode
+        if self.scene.delete_mode:
+            self.view.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            self.delete_action.setChecked(True)  # Mostrar como activado
+            # Desactivar otros modos y sus acciones
+            self.select_action.setChecked(False)
+            self.connect_action.setChecked(False)
+            self.text_action.setChecked(False)
+        else:
+            self.view.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+            self.delete_action.setChecked(False)
+
 
     def analisis_connections(self, initial_node):
         final_flow_steps = []
