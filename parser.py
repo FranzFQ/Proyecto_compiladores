@@ -140,16 +140,10 @@ class Parser:
                     return f"""print({frac[1]});
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
-                elif frac[0] == 'readStr':
+                elif frac[0] == 'read':
                     if is_last:
-                      return f"""inputStr({frac[1]});"""
-                    return f"""inputStr({frac[1]});
-                    {self.parse(name, str(id(edges[0])), looping, 
-                                convergence=convergence, expecting=expecting, visited=visited)}"""
-                elif frac[0] == 'readNum':
-                    if is_last:
-                      return f"""inputNum({frac[1]});"""
-                    return f"""inputNum({frac[1]});
+                      return f"""input({frac[1]});"""
+                    return f"""input({frac[1]});
                     {self.parse(name, str(id(edges[0])), looping, 
                                 convergence=convergence, expecting=expecting, visited=visited)}"""
                 

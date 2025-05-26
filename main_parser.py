@@ -8,6 +8,9 @@ int main() {
     int b = 4;
     float c = 2.3 + b;
     float d = 5.0;
+    float e;
+    input(e);
+    print("El valor ingresado es: ", e);
     while (b < a) {
         b = b + 1;
 
@@ -105,7 +108,7 @@ class Parseador:
                 instrucciones.append(self.sentencia_if())
             elif self.obtener_token_actual()[1] == 'print':
                 instrucciones.append(self.sentencia_print())
-            elif self.obtener_token_actual()[1] == 'inputStr' or self.obtener_token_actual()[1] == 'inputNum':
+            elif self.obtener_token_actual()[1] == 'input':
                 instrucciones.append(self.sentencia_input())
             elif (self.obtener_token_actual()[0] == 'IDENTIFIER' and self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1][1] == '('):
                 instrucciones.append(self.llamada_funcion())

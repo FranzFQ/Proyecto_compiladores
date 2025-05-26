@@ -6,7 +6,7 @@ import re
 # Definir patrones de tokens
 
 token_patron = {
-    "KEYWORD": r'\b(if|else|while|for|return|int|str|float|void|class|def|print|inputStr|inputNum)\b',
+    "KEYWORD": r'\b(if|else|while|for|return|int|str|float|void|class|def|print|input)\b',
     "IDENTIFIER": r'\b[a-zA-Z_][a-zA-Z0-9_]*\b',
     "NUMBER": r'\b\d+(\.\d+)?\b',
     "OPERATOR": r'<=|>=|==|!=|&&|"|[\+\-\*/=<>\!\||\|\']',
@@ -211,7 +211,6 @@ class NodoOperacion(NodoAST):
                 resultado = izquierda_sim.izquierda.valor * izquierda_sim.derecha.valor
             elif izquierda_sim.operador[1] == "/" and izquierda_sim.derecha.valor != 0:
                 resultado = izquierda_sim.izquierda.valor / izquierda_sim.derecha.valor
-            print(resultado)
             izquierda_sim = NodoNumero(resultado)
 
         return NodoOperacion(izquierda_sim, self.operador, self.derecha)
@@ -511,7 +510,6 @@ class NodoNumero(NodoAST):
     def generar_codigo(self, vars):
         if isinstance(self.valor, float):
             nombre_const = f"const_float_{str(self.valor).replace('.', '_')}"
-            print(nombre_const)
             return f"   fld qword [{nombre_const}] ; Cargar float {self.valor} en ST0" 
         return f'   mov eax, {self.valor} ; Cargar número {self.valor} en eax'
 
@@ -795,7 +793,6 @@ class AnalizadorSemantico:
                 nombre_cadena = f"cadena_{self.contador_cadenas}"
                 self.contador_cadenas += 1
                 self.tabla_simbolos.declarar_cadena(nombre_cadena, nodo.variable.valor)
-                print(f"Cadena '{nombre_cadena}' agregada a la tabla de símbolos")
                 nodo.variable = NodoIdentificador(('IDENTIFIER', nombre_cadena), 'str')  # Reemplazar la cadena por su nombre
             elif isinstance(nodo.variable, NodoIdentificador):
                 # Verificar si la variable existe
