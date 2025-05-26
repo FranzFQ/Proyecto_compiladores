@@ -460,52 +460,6 @@ class FlowScene(QGraphicsScene):
                             decision_center = self.first_item.center()
                             relative_point = conn_point_on_decision - decision_center
                             
-                            # Condición para la salida 'Yes' o 'No' (inferior o derecha)
-                            # Esto es una simplificación, podrías necesitar una lógica más robusta
-                            # para determinar qué lado del rombo es "inferior" o "derecho"
-                            # con respecto al punto de conexión.
-                            # Por ahora, si la conexión no sale por la parte "superior" o "izquierda"
-                            # del rombo, la consideramos válida para la decisión.
-                            # Esto puede requerir un ajuste más preciso.
-                            
-                            # Para un rombo, las salidas "válidas" son típicamente por abajo o a la derecha
-                            # Una conexión inválida para una decisión sería si intenta salir por la esquina
-                            # superior o izquierda si se supone que es una salida "Yes" o "No"
-                            # Esta lógica es compleja para un rombo. Podrías necesitar un enfoque diferente.
-                            
-                            # Por simplicidad, mantendré una lógica similar a la que tenías,
-                            # pero ten en cuenta que el rombo tiene 4 lados.
-                            # Para decisiones, lo más común es que "Yes" salga por un lado y "No" por otro.
-                            
-                            # Si quieres ser muy estricto con las esquinas del rombo, puedes usar esto:
-                            # Los puntos del rombo son (w/2, 0), (w, h/2), (w/2, h), (0, h/2)
-                            # Si relative_point está en el cuadrante superior-izquierdo del rombo (respecto a su centro),
-                            # podría ser una salida "inválida" si se espera que salgan por abajo/derecha.
-                            
-                            # Para una decisión, a menudo se espera que haya una salida "verdadero" y una "falso".
-                            # Si quieres controlar las direcciones, lo ideal sería que el `get_connection_point`
-                            # ya diera pistas sobre la dirección.
-
-                            # Deshabilitando la validación estricta de coordenadas para decisiones
-                            # porque es compleja y puede generar falsos positivos/negativos
-                            # basándose solo en las coordenadas relativas del punto de conexión.
-                            # La validación de "Yes"/"No" de las etiquetas ya es un buen control.
-                            
-                            # if relative_point.x() < -1e-6 and relative_point.y() < -1e-6: 
-                            #     valid_connection = False
-                            #     QMessageBox.warning(self.views()[0], "Error de Conexión",
-                            #                         "Las decisiones solo pueden salir por la derecha o por abajo.")
-
-                        # if valid_connection and second_item.shape_type == 'decision':
-                        #     conn_point_on_decision = second_item.get_connection_point(self.first_item.center())
-                        #     decision_center = second_item.center()
-                        #     relative_point = conn_point_on_decision - decision_center
-                            
-                        #     if relative_point.x() > 1e-6 and relative_point.y() > 1e-6: 
-                        #         valid_connection = False
-                        #         QMessageBox.warning(self.views()[0], "Error de Conexión",
-                        #                             "Las decisiones solo pueden entrar por arriba o por la izquierda.")
-
                         if valid_connection:
                             if self.first_item.shape_type == 'decision':
                                 label_text, ok = QInputDialog.getItem(
@@ -694,6 +648,7 @@ class FlowMainWindow(QMainWindow):
                 padding: 5px;
                 font-family: Consolas, monospace;
                 font-size: 10pt;
+                color: black;
             }
         """)
         self.compilation_output.setReadOnly(True)
@@ -907,24 +862,6 @@ class FlowMainWindow(QMainWindow):
         return final_flow_steps
 
     def compile_flowchart(self): 
-        # Ejemplo para aceder a los nodos de decisión y sus conexiones
-        # for i in self.scene.items():
-        #     if isinstance(i, FlowShape):
-        #         if i.shape_type == "decision":
-        #             print(f"El nodo de decisión {i.text} tiene {len(self.scene.connections.get_connections_from(i))} conexiones salientes.")
-        #             yes = None
-        #             no = None
-        #             # Verificar conexiones salientes del nodo de decisión
-        #             # i es el node de decisión actual
-        #             for conn in self.scene.connections.get_connections_from(i):
-        #                 if conn[1] == "Yes":
-        #                     yes = conn[0]
-        #                     # Imprimir información de la conexión Yes (Es el nodo al cual apunta la conexión si)
-        #                     print(f"Conexión 'Yes' encontrada: {yes.text} (ID: {yes.id})")
-        #                 elif conn[1] == "No":
-        #                     no = conn[0]
-        #                     # Imprimir información de la conexión No (Es el nodo al cual apunta la conexión no)
-        #                     print(f"Conexión 'No' encontrada: {no.text} (ID: {no.id})")
         try:
             if not self.scene.start_node:
                 self.compilation_output.setText("Error: No se ha definido un nodo de inicio.\n"
@@ -933,7 +870,7 @@ class FlowMainWindow(QMainWindow):
                 return
             final_flow_steps = []
             #Diccionario el cual contiene las funciones
-            #Ejamplo de como se guardan: {"Nombre de la funcion": [Nodo1, nodo2, nodo3]}
+            #Ejemplo de como se guardan: {"Nombre de la funcion": [Nodo1, nodo2, nodo3]}
             diccionary_functions = {}
             print("hola")
             
