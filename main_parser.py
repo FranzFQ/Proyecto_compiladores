@@ -4,23 +4,19 @@ from analizador import *
 
 texto = """
 int main() {
-    float a = 10.0;
-    float b = 3.3;
-    int m = 3;
+    int a = 23;
+    int b = 4;
+    float c = 2.3 + b;
+    float d = 5.0;
+    while (b < a) {
+        b = b + 1;
 
-    float c = 2.2 + 1.4 / b + a;
-    float d = a / b;
-    float e = a + b;
-    float f = a - b;
-    float g = m + 1.2;
+        d = d + 2.5;
+        print(d);
 
+    }
+    print("Fin del programa", b);
 
-
-    print(c);
-    print(d);
-    print(e);
-    print(f);
-    print(g);
 
 }
 
@@ -178,7 +174,7 @@ class Parseador:
         token = self.obtener_token_actual()
         
         if token[0] == "IDENTIFIER":
-            return NodoIdentificador(self.coincidir("IDENTIFIER"), 'float')
+            return NodoIdentificador(self.coincidir("IDENTIFIER"), 'None')
         elif token[0] == "NUMBER":
             numero = self.coincidir("NUMBER")[1]
             if '.' in numero:
@@ -387,10 +383,10 @@ try:
 
 
     codigo_asm = arbol_ast.generar_codigo()
-    # print("Variables")
-    # for llave in (arbol_ast.analizador_semantico.tabla_simbolos.variables.keys()):
-    #     valor = arbol_ast.analizador_semantico.tabla_simbolos.variables.get(llave)
-    #     print(f"{llave}:{valor}")
+    print("Variables")
+    for llave in (arbol_ast.analizador_semantico.tabla_simbolos.variables.keys()):
+        valor = arbol_ast.analizador_semantico.tabla_simbolos.variables.get(llave)
+        print(f"{llave}:{valor}")
 
 
 

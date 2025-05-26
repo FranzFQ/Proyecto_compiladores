@@ -835,6 +835,9 @@ class AnalizadorSemantico:
             # Declarar la variable en la tabla de símbolos
             self.tabla_simbolos.declarar_variable(nodo.nombre[1], nodo.tipo)
         elif isinstance(nodo, NodoIdentificador):
+            if nodo.tipo == 'None':
+                tipo = self.tabla_simbolos.obtener_tipo_variable(nodo.nombre[1])
+                nodo.tipo = tipo
             return self.tabla_simbolos.obtener_tipo_variable(nodo.nombre[1])
 
         elif isinstance(nodo, NodoCadena):
