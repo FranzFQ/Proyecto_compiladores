@@ -632,6 +632,8 @@ class FlowMainWindow(QMainWindow):
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.setFixedSize(1000, 800)
 
+        self.compilation_output = QTextEdit()
+
         # Crear barra de herramientas
         toolbar = QToolBar("Formas")
         self.addToolBar(toolbar)
@@ -756,13 +758,12 @@ class FlowMainWindow(QMainWindow):
 
             outgoing_connections = self.scene.connections.get_connections_from(current_node_for_bfs)
             for next_node_in_flow in outgoing_connections:
+                next_node_in_flow = next_node_in_flow[0]  # Obtener el nodo de la conexión
                 if next_node_in_flow.id not in visited_nodes_ids:
                     processing_queue.append(next_node_in_flow)
-
         if not final_flow_steps:
-             self.compilation_output_label.setText("El nodo de inicio no tiene conexiones salientes o no se pudo procesar el flujo.")
+             self.compilation_output.setText("El nodo de inicio no tiene conexiones salientes o no se pudo procesar el flujo.")
              return None
-
         return final_flow_steps
 
     def compile_flowchart(self): 
@@ -786,7 +787,7 @@ class FlowMainWindow(QMainWindow):
         #                     print(f"Conexión 'No' encontrada: {no.text} (ID: {no.id})")
         try:
             if not self.scene.start_node:
-                self.compilation_output_label.setText("Error: No se ha definido un nodo de inicio.\n"
+                self.compilation_output.setText("Error: No se ha definido un nodo de inicio.\n"
                                                     "Añada una figura 'Inicio/Fin'.")
                 QMessageBox.warning(self, "Error de Compilación", "No se ha definido un nodo de inicio.")
                 return
@@ -794,17 +795,21 @@ class FlowMainWindow(QMainWindow):
             #Diccionario el cual contiene las funciones
             #Ejamplo de como se guardan: {"Nombre de la funcion": [Nodo1, nodo2, nodo3]}
             diccionary_functions = {}
+            print("hola")
             
             for item in self.scene.items():
                 if isinstance(item, QGraphicsLineItem):
                     pass
+                elif isinstance(item, QGraphicsPolygonItem):
+                    pass
+
                 elif isinstance(item, FlowShape):
                     for function in diccionary_functions:
                         if item.text.strip() == function: 
                             QMessageBox.warning(self, "Error de sintaxis", "Se detectaron dos funciones con el mismo nombre")
                             break
 
-                    if item.shape_type == "start_end" and item.text == "inicio":
+                    if item.shape_type == "start_end" and item.text.strip() == "inicio":
                             final_flow_steps = self.analisis_connections(item)
                             diccionary_functions[item.text.strip()] = final_flow_steps
 
@@ -815,22 +820,20 @@ class FlowMainWindow(QMainWindow):
             output_text = "Orden de Ejecución Detectado:\n"
             for i, function in enumerate(diccionary_functions):
                 keys = list(diccionary_functions.keys())
+                print(f"Función: {function} (ID: {id(function)})")
                 output_text += f"\nNodos de la funcion: {keys[i]}\n"
                 for j, node in enumerate(diccionary_functions[function]):
                     node_text = f"Nodo: {node.text.strip() if node.text.strip() else node.shape_type}"
-                    output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type} (dir: {node}) (id: {id(node)}))\n"
-
+                    output_text += f"{j+1}. {node_text} (Tipo: {node.shape_type} (dir: {node.text.strip()}) (id: {id(node.id)}))\n"
 
             diccionary_functions['conn'] = self.scene.connections
 
             parser = Parser(diccionary_functions)
             codigo_c = parser.generate_code()
 
-            
-
             print(codigo_c)
             token = tokenize(codigo_c)
-            self.compilation_output_label.setText(codigo_c)
+            self.compilation_output.setText(codigo_c)
 
             print("Iniciando análisis sintáctico...")
             parseador = Parseador(token)
@@ -852,7 +855,7 @@ class FlowMainWindow(QMainWindow):
                 print(f"Error al generar el código ensamblador: {e}")
 
         except Exception as e:
-            self.compilation_output_label.setText(f"Error: {str(e)}")
+            self.compilation_output.setText(f"Error: {str(e)}")
             QMessageBox.warning(self, "Error de Compilación", str(e))
             
 class WslTerminalWidget(QWidget):
