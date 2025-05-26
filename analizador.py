@@ -102,11 +102,11 @@ class NodoPrograma(NodoAST):
                 # Convertimos main en _start
                 codigo.append("main:")
                 for instruccion in funcion.cuerpo:
-                    codigo.append(instruccion.generar_codigo())
+                    codigo.append(instruccion.generar_codigo(self.variables))
                 codigo.append("   mov eax, 0")  # sys_exit
                 codigo.append("   ret")
             else:
-                codigo.append(funcion.generar_codigo())    
+                codigo.append(funcion.generar_codigo(self.variables))    
         # Función para imprimir un numero
         return "\n".join(codigo)
     
@@ -128,7 +128,7 @@ class NodoFuncion(NodoAST):
         cuerpo = "\n   ".join(c.traducir() for c in self.cuerpo)
         return f"def {self.nombre[1]}({params}):\n   {cuerpo}"
     
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         codigo = []
         if self.nombre[1] != 'main':  # Solo generar etiqueta si no es main
             codigo.append(f'{self.nombre[1]}:')
@@ -138,7 +138,7 @@ class NodoFuncion(NodoAST):
         
         # Generar código para el cuerpo
         for instruccion in self.cuerpo:
-            codigo.append(instruccion.generar_codigo())
+            codigo.append(instruccion.generar_codigo(vars))
         
         
         return '\n'.join(codigo)
@@ -162,10 +162,11 @@ class NodoAsignacion(NodoAST):
     def traducir(self):
         return f"{self.nombre[1]} = {self.expresion.traducir()}"
 
-    def generar_codigo(self):
-        codigo = self.expresion.generar_codigo()
-        if hasattr(self.expresion, 'tipo') and self.expresion.tipo == 'float':
-
+    def generar_codigo(self, vars):
+        codigo = self.expresion.generar_codigo(vars)
+        if isinstance(self.expresion, NodoOperacion) and self.expresion.tipo == 'float':
+            codigo += f'\n   fstp qword [{self.nombre[1]}] ; Guardar float en {self.nombre[1]}'
+        elif isinstance(self.expresion, NodoNumero) and isinstance(self.expresion.valor, float):
             codigo += f'\n   fstp qword [{self.nombre[1]}] ; Guardar float en {self.nombre[1]}'
         else:
             codigo += f'\n   mov [{self.nombre[1]}], eax ; Guardar entero en {self.nombre[1]}'
@@ -177,7 +178,7 @@ class NodoAsignacionCadena(NodoAST):
         self.nombre = nombre
         self.expresion = expresion
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         # No se necesita código, ya que se declara en la sección de datos
         return ""
 
@@ -190,94 +191,280 @@ class NodoOperacion(NodoAST):
         self.derecha = derecha
         self.tipo = None
 
-    def optimizar(self):
+    def simplificar(self):
         if isinstance(self.izquierda, NodoOperacion):
-            self.izquierda = self.izquierda.optimizar()
+            izquierda_sim = self.izquierda.simplificar()
         else:
-            izquierda = self.izquierda
-        if isinstance(self.derecha, NodoOperacion):
-            self.derecha = self.derecha.optimizar()
-        else:
-            derecha = self.derecha
+            izquierda_sim = self.izquierda
 
-        # Si ambos operandos son números, evaluamos la operación
-        if isinstance(izquierda, NodoNumero) and isinstance(derecha, NodoNumero):
-            if self.operador == "+":
-                return NodoNumero(izquierda.valor + derecha.valor)
-            elif self.operador == "-":
-                return NodoNumero(izquierda.valor - derecha.valor)
-            elif self.operador == "*":
-                return NodoNumero(izquierda.valor * derecha.valor)
-            elif self.operador == "/" and derecha.valor != 0:
-                return NodoNumero(izquierda.valor / derecha.valor)
-        # Simplificación algebraica
-        if self.operador == '*' and isinstance(derecha, NodoNumero) and derecha.valor == 1:
-            return izquierda
-        if self.operador == '*' and isinstance(izquierda, NodoNumero) and izquierda.valor == 1:
-            return derecha
-        if self.operador == '+' and isinstance(derecha, NodoNumero) and derecha.valor == 0:
-            return izquierda
-        if self.operador == '+' and isinstance(izquierda, NodoNumero) and izquierda.valor == 0:
-            return derecha
+        if (isinstance(izquierda_sim, NodoOperacion) and
+            isinstance(izquierda_sim.izquierda, NodoNumero) and
+            isinstance(izquierda_sim.derecha, NodoNumero)):
+            
+            resultado = 0
 
-        return NodoOperacion(izquierda, self.operador, derecha)
+            if izquierda_sim.operador[1] == "+":
+                resultado = izquierda_sim.izquierda.valor + izquierda_sim.derecha.valor
+            elif izquierda_sim.operador[1] == "-":
+                resultado = izquierda_sim.izquierda.valor - izquierda_sim.derecha.valor
+            elif izquierda_sim.operador[1] == "*":
+                resultado = izquierda_sim.izquierda.valor * izquierda_sim.derecha.valor
+            elif izquierda_sim.operador[1] == "/" and izquierda_sim.derecha.valor != 0:
+                resultado = izquierda_sim.izquierda.valor / izquierda_sim.derecha.valor
+            print(resultado)
+            izquierda_sim = NodoNumero(resultado)
+
+        return NodoOperacion(izquierda_sim, self.operador, self.derecha)
+    
+
+
         
     def traducir(self):
         return f"{self.izquierda.traducir()} {self.operador[1]} {self.derecha.traducir()}"
+    
+    def codigo_flotantes(self, izq, der, vars):
+        codigo = []
+
+        codigo.append(izq.generar_codigo(vars))
+        if isinstance(izq.valor, int):
+            codigo.append("sub esp, 4\n   mov [esp], eax\n   fild dword [esp]\n   add esp, 4") # sirve para convertir el (identificador / numero) entero a flotante y dejarlo en pila
+
+        codigo.append(der.generar_codigo(vars))
+        if isinstance(der.valor, int):
+            codigo.append("sub esp, 4\n   mov [esp], eax\n   fild dword [esp]\n   add esp, 4") # sirve para convertir el (identificador / numero) entero a flotante y dejarlo en pila
+
+
+        if self.operador[1] == '+':
+            codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+        elif self.operador[1] == '-':
+            codigo.append('   fsubp st1, st0')
+        elif self.operador[1] == '*':
+            codigo.append('   fmulp st1, st0')
+        elif self.operador[1] == '/':
+            codigo.append('   fdivp st1, st0')
+
+        # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
+        return '\n'.join(codigo)
+
+    def codigo_enteros(self, izq, der, vars):
+        codigo = []
+        codigo.append(izq.generar_codigo(vars)) # Cargar el operando izquierdo
+        codigo.append('   push eax; guardar en la pila') # Guardar en la pila
+        codigo.append(der.generar_codigo(vars)) # Cargar el operando derecho
+        codigo.append('   pop ebx; recuperar el primer operando') # Sacar de la pila
+        # ebx = op1 y eax = op2
+        if self.operador[1] == '+':
+            codigo.append('   add eax, ebx; eax = eax + ebx')
+        elif self.operador[1] == '-':
+            codigo.append('   sub ebx, eax; ebx = ebx - eax')
+            codigo.append('   mov eax, ebx; eax = ebx')
+        elif self.operador[1] == '*':
+            codigo.append('   imul ebx; eax = eax * ebx')
+        elif self.operador[1] == '/':
+            codigo.append('   mov edx, 0; limpiar edx')
+            codigo.append('   idiv ebx; eax = eax / ebx')
+        elif self.operador[1] == '<':
+            codigo.append('   cmp eax, ebx; comparar eax y ebx')
+            codigo.append('   mov eax, 0; cargar 0 en eax')
+            codigo.append('   setl al; eax = eax < ebx')
+        elif self.operador[1] == '>':
+            codigo.append('   cmp eax, ebx; comparar eax y ebx')
+            codigo.append('   mov eax, 0; cargar 0 en eax')
+            codigo.append('   setg al; eax = eax > ebx')
+        return '\n'.join(codigo)
+
+    def generar_codigo(self, vars):
+
+        simplified = None
+        if isinstance(self.izquierda, NodoOperacion) or isinstance(self.derecha, NodoOperacion):
+            simplified = self.simplificar()
         
-    def generar_codigo(self):
-        if self.tipo == 'float':
-            print("El tipo es flotante")
-            print(self.izquierda.generar_codigo())
-            codigo = []
-            codigo.append(self.izquierda.generar_codigo())
-            codigo.append(self.derecha.generar_codigo())
+        izq = None
+        der = None
 
-
-
-            if self.operador[1] == '+':
-                codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
-            elif self.operador[1] == '-':
-                codigo.append('   fsubp st1, st0')
-            elif self.operador[1] == '*':
-                codigo.append('   fmulp st1, st0')
-            elif self.operador[1] == '/':
-                codigo.append('   fdivp st1, st0')
-
-            # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
-            codigo.append('   sub esp, 8')
-            codigo.append('   fstp qword [esp]')
-            codigo.append('   pop eax')  # Simulación, aunque en floats no se usa eax directamente
-            return '\n'.join(codigo)
-        elif isinstance(self.izquierda, NodoOperacion):
-            print("hola mundo")
+        if simplified:
+            izq = simplified.izquierda
+            der = simplified.derecha
         else:
-            codigo = []
-            print("Aquí no debería entrar")
+            izq = self.izquierda
+            der = self.derecha
 
-            codigo.append(self.izquierda.generar_codigo()) # Cargar el operando izquierdo
-            codigo.append('   push eax; guardar en la pila') # Guardar en la pila
-            codigo.append(self.derecha.generar_codigo()) # Cargar el operando derecho
-            codigo.append('   pop ebx; recuperar el primer operando') # Sacar de la pila
-            # ebx = op1 y eax = op2
-            if self.operador[1] == '+':
-                codigo.append('   add eax, ebx; eax = eax + ebx')
-            elif self.operador[1] == '-':
-                codigo.append('   sub ebx, eax; ebx = ebx - eax')
-                codigo.append('   mov eax, ebx; eax = ebx')
-            elif self.operador[1] == '*':
-                codigo.append('   imul ebx; eax = eax * ebx')
-            elif self.operador[1] == '/':
-                codigo.append('   mov edx, 0; limpiar edx')
-                codigo.append('   idiv ebx; eax = eax / ebx')
-            elif self.operador[1] == '<':
-                codigo.append('   cmp eax, ebx; comparar eax y ebx')
-                codigo.append('   mov eax, 0; cargar 0 en eax')
-                codigo.append('   setl al; eax = eax < ebx')
-            elif self.operador[1] == '>':
-                codigo.append('   cmp eax, ebx; comparar eax y ebx')
-                codigo.append('   mov eax, 0; cargar 0 en eax')
-                codigo.append('   setg al; eax = eax > ebx')
+        if isinstance(izq, NodoNumero) and isinstance(der, NodoNumero):
+            if isinstance(izq.valor, int) and isinstance(der.valor, int):
+                self.tipo = 'int'
+                return self.codigo_enteros(izq, der, vars)
+            else:
+                self.tipo = 'float'
+                return self.codigo_flotantes(izq, der, vars)
+            
+        elif isinstance(izq, NodoIdentificador) and isinstance(der, NodoIdentificador):
+            if vars[izq.nombre[1]] == 'int' and vars[der.nombre[1]] == 'int':
+                self.tipo = 'int'
+                return self.codigo_enteros(izq, der, vars)
+            elif vars[izq.nombre[1]] == 'float' and vars[der.nombre[1]]== 'int':
+                self.tipo = 'float'
+                codigo = []
+                codigo.append(izq.generar_codigo(vars))
+                codigo.append(der.generar_codigo(vars))
+                codigo.append("sub esp, 4\n   mov [esp], eax\n   fild dword [esp]\n   add esp, 4") # sirve para convertir el (identificador / numero) entero a flotante y dejarlo en pila
+                if self.operador[1] == '+':
+                    codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+                elif self.operador[1] == '-':
+                    codigo.append('   fsubp st1, st0')
+                elif self.operador[1] == '*':
+                    codigo.append('   fmulp st1, st0')
+                elif self.operador[1] == '/':
+                    codigo.append('   fdivp st1, st0')
+
+                # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
+                return '\n'.join(codigo)
+            elif vars[izq.nombre[1]] == 'int' and vars[der.nombre[1]] == 'float':
+                self.tipo = 'float'
+                codigo = []
+                codigo.append(izq.generar_codigo(vars))
+                codigo.append("sub esp, 4\n   mov [esp], eax\n   fild dword [esp]\n   add esp, 4") # sirve para convertir el (identificador / numero) entero a flotante y dejarlo en pila
+                codigo.append(der.generar_codigo(vars))
+                if self.operador[1] == '+':
+                    codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+                elif self.operador[1] == '-':
+                    codigo.append('   fsubp st1, st0')
+                elif self.operador[1] == '*':
+                    codigo.append('   fmulp st1, st0')
+                elif self.operador[1] == '/':
+                    codigo.append('   fdivp st1, st0')
+
+                # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
+                return '\n'.join(codigo)
+            else:
+                self.tipo = 'float'
+                codigo = []
+                codigo.append(izq.generar_codigo(vars))
+                codigo.append(der.generar_codigo(vars))
+                if self.operador[1] == '+':
+                    codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+                elif self.operador[1] == '-':
+                    codigo.append('   fsubp st1, st0')
+                elif self.operador[1] == '*':
+                    codigo.append('   fmulp st1, st0')
+                elif self.operador[1] == '/':
+                    codigo.append('   fdivp st1, st0')
+
+                # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
+                return '\n'.join(codigo)
+        
+
+        elif isinstance(izq, NodoIdentificador) and isinstance(der, NodoNumero):
+            if vars[izq.nombre[1]] == 'int' and isinstance(der.valor, int):
+                self.tipo = 'int'
+                return self.codigo_enteros(izq, der, vars)
+            elif vars[izq.nombre[1]] == 'float' and isinstance(der.valor, int):
+                self.tipo = 'float'
+                codigo = []
+                codigo.append(izq.generar_codigo(vars))
+                codigo.append(der.generar_codigo(vars))
+                codigo.append("sub esp, 4\n   mov [esp], eax\n   fild dword [esp]\n   add esp, 4") # sirve para convertir el (identificador / numero) entero a flotante y dejarlo en pila
+
+                if self.operador[1] == '+':
+                    codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+                elif self.operador[1] == '-':
+                    codigo.append('   fsubp st1, st0')
+                elif self.operador[1] == '*':
+                    codigo.append('   fmulp st1, st0')
+                elif self.operador[1] == '/':
+                    codigo.append('   fdivp st1, st0')
+                return '\n'.join(codigo)
+            elif vars[izq.nombre[1]] == 'int' and isinstance(der.valor, float):
+                self.tipo = 'float'
+                codigo = []
+                codigo.append(izq.generar_codigo(vars))
+                codigo.append("sub esp, 4\n   mov [esp], eax\n   fild dword [esp]\n   add esp, 4") # sirve para convertir el (identificador / numero) entero a flotante y dejarlo en pila
+                codigo.append(der.generar_codigo(vars))
+                if self.operador[1] == '+':
+                    codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+                elif self.operador[1] == '-':
+                    codigo.append('   fsubp st1, st0')
+                elif self.operador[1] == '*':
+                    codigo.append('   fmulp st1, st0')
+                elif self.operador[1] == '/':
+                    codigo.append('   fdivp st1, st0')
+
+                # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
+                return '\n'.join(codigo)
+            else:
+                self.tipo = 'float'
+                codigo = []
+                codigo.append(izq.generar_codigo(vars))
+                codigo.append(der.generar_codigo(vars))
+                if self.operador[1] == '+':
+                    codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+                elif self.operador[1] == '-':
+                    codigo.append('   fsubp st1, st0')
+                elif self.operador[1] == '*':
+                    codigo.append('   fmulp st1, st0')
+                elif self.operador[1] == '/':
+                    codigo.append('   fdivp st1, st0')
+
+                # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
+                return '\n'.join(codigo)
+
+        elif isinstance(izq, NodoNumero) and isinstance(der, NodoIdentificador):
+            if vars[der.nombre[1]] == 'int' and isinstance(izq.valor, int):
+                self.tipo = 'int'
+                return self.codigo_enteros(izq, der, vars)
+            elif vars[der.nombre[1]] == 'float' and isinstance(izq.valor, int):
+                self.tipo = 'float'
+                codigo = []
+                codigo.append(izq.generar_codigo())
+                codigo.append("sub esp, 4\n   mov [esp], eax\n   fild dword [esp]\n   add esp, 4") # sirve para convertir el (identificador / numero) entero a flotante y dejarlo en pila
+                codigo.append(der.generar_codigo())
+
+                if self.operador[1] == '+':
+                    codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+                elif self.operador[1] == '-':
+                    codigo.append('   fsubp st1, st0')
+                elif self.operador[1] == '*':
+                    codigo.append('   fmulp st1, st0')
+                elif self.operador[1] == '/':
+                    codigo.append('   fdivp st1, st0')
+                return '\n'.join(codigo)
+            elif vars[der.nombre[1]] == 'int' and isinstance(izq.valor, float):
+                self.tipo = 'float'
+                codigo = []
+                codigo.append(izq.generar_codigo(vars))
+                codigo.append(der.generar_codigo(vars))
+                codigo.append("sub esp, 4\n   mov [esp], eax\n   fild dword [esp]\n   add esp, 4") # sirve para convertir el (identificador / numero) entero a flotante y dejarlo en pila
+                if self.operador[1] == '+':
+                    codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+                elif self.operador[1] == '-':
+                    codigo.append('   fsubp st1, st0')
+                elif self.operador[1] == '*':
+                    codigo.append('   fmulp st1, st0')
+                elif self.operador[1] == '/':
+                    codigo.append('   fdivp st1, st0')
+
+                # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
+                return '\n'.join(codigo)
+            else:
+                self.tipo = 'float'
+                codigo = []
+                codigo.append(izq.generar_codigo(vars))
+                codigo.append(der.generar_codigo(vars))
+                if self.operador[1] == '+':
+                    codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
+                elif self.operador[1] == '-':
+                    codigo.append('   fsubp st1, st0')
+                elif self.operador[1] == '*':
+                    codigo.append('   fmulp st1, st0')
+                elif self.operador[1] == '/':
+                    codigo.append('   fdivp st1, st0')
+
+                # Guardar resultado en memoria (puedes usar una temp o pasar por eax si deseas imprimir)
+                return '\n'.join(codigo)
+
+        elif isinstance(izq, NodoOperacion):
+            codigo = []
+            codigo.append(izq.generar_codigo(vars))
+
             return '\n'.join(codigo)
 
 class NodoRetorno(NodoAST):
@@ -288,7 +475,7 @@ class NodoRetorno(NodoAST):
     def traducir(self):
         return f"return {self.expresion.traducir()}"
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         codigo = self.expresion.generar_codigo()
         return f"{codigo}\n   ret ; Retornar desde la subrutina"
 
@@ -301,8 +488,7 @@ class NodoIdentificador(NodoAST):
     def traducir(self):
         return self.nombre[1]
 
-    def generar_codigo(self):
-        print(self.tipo)
+    def generar_codigo(self, vars):
         if self.tipo == 'int':
             return f'   mov eax, [{self.nombre[1]}] ; Cargar variable {self.nombre[1]} en eax'
         elif self.tipo == 'float':
@@ -322,7 +508,7 @@ class NodoNumero(NodoAST):
     def traducir(self):
         return str(self.valor)
     
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         if isinstance(self.valor, float):
             nombre_const = f"const_float_{str(self.valor).replace('.', '_')}"
             print(nombre_const)
@@ -336,7 +522,7 @@ class NodoDeclaracionVariable(NodoAST):
         self.nombre = nombre
         self.tipo = tipo
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         return '' # No se necesita código, ya que se declara en la sección de datos
     
 
@@ -346,18 +532,18 @@ class NodoWhile(NodoAST):
         self.condicion = condicion
         self.cuerpo = cuerpo
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         etiqueta_inicio = f'etiqueta_inicio_{id(self)}'
         etiqueta_fin = f'etiqueta_fin_while_{id(self)}'
 
         codigo = []
         codigo.append(f'{etiqueta_inicio}:')
-        codigo.append(self.condicion.generar_codigo())
+        codigo.append(self.condicion.generar_codigo(vars))
         codigo.append('   cmp eax, 0 ; Comparar resultado con 0')
         codigo.append(f'   jne {etiqueta_fin} ; Saltar al final si la condición es falsa')
 
         for instruccion in self.cuerpo:
-            codigo.append(instruccion.generar_codigo())
+            codigo.append(instruccion.generar_codigo(vars))
 
         codigo.append(f'   jmp {etiqueta_inicio} ; Saltar al inicio del ciclo')
         codigo.append(f'{etiqueta_fin}:')
@@ -371,12 +557,12 @@ class NodoIf(NodoAST):
         self.cuerpo = cuerpo
         self.sino = sino
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         etiqueta_else = f'etiqueta_else_{id(self)}'
         etiqueta_fin = f'etiqueta_fin_if_{id(self)}'
 
         codigo = []
-        codigo.append(self.condicion.generar_codigo())
+        codigo.append(self.condicion.generar_codigo(vars))
         codigo.append('   cmp eax, 0 ; Comparar resultado con 0')
 
         if self.sino:
@@ -386,13 +572,13 @@ class NodoIf(NodoAST):
 
         # Código del cuerpo del if
         for instruccion in self.cuerpo:
-            codigo.append(instruccion.generar_codigo())
+            codigo.append(instruccion.generar_codigo(vars))
 
         if self.sino:
             codigo.append(f'   jmp {etiqueta_fin} ; Saltar al final del if')
             codigo.append(f'{etiqueta_else}:')
             for instruccion in self.sino:
-                codigo.append(instruccion.generar_codigo())
+                codigo.append(instruccion.generar_codigo(vars))
 
         codigo.append(f'{etiqueta_fin}:')
         return '\n'.join(codigo)
@@ -405,28 +591,28 @@ class NodoFor(NodoAST):
         self.actualizacion = actualizacion    # Debe ser una NodoAsignacion
         self.cuerpo = cuerpo
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         etiqueta_inicio = "for_inicio"
         etiqueta_fin = "for_fin"
         
         codigo = []
         # Inicialización
-        codigo.append(self.inicializacion.generar_codigo())
+        codigo.append(self.inicializacion.generar_codigo(vars))
         
         # Etiqueta de inicio del bucle
         codigo.append(f"{etiqueta_inicio}:")
         
         # Condición
-        codigo.append(self.condicion.generar_codigo())
+        codigo.append(self.condicion.generar_codigo(vars))
         codigo.append("   cmp eax, 0")
         codigo.append(f"   jne {etiqueta_fin}")
         
         # Cuerpo del for, ejecuta todas las instrucciones dentro del for
         for instruccion in self.cuerpo:
-            codigo.append(instruccion.generar_codigo())
+            codigo.append(instruccion.generar_codigo(vars))
         
         # Actualización, ejecuta la instrucción de actualización
-        codigo.append(self.actualizacion.generar_codigo())
+        codigo.append(self.actualizacion.generar_codigo(vars))
         
         # Salto al inicio del for
         codigo.append(f"   jmp {etiqueta_inicio}")
@@ -442,7 +628,7 @@ class NodoInput(NodoAST):
     def __init__(self, variable):
         self.variable = variable  # Puede ser un NodoIdentificador
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         codigo = []
         # Segun el tipo de variable (str o int), se debe cargar el valor en eax
         # Si self.variable.tipo == 'int':
@@ -469,7 +655,7 @@ class NodoPrint(NodoAST):
     def __init__(self, variable):
         self.variable = variable # Puede ser un NodoIdentificador, NodoNumero o NodoCadena
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         codigo = []
         # Cargar la variable en eax
         
@@ -508,11 +694,11 @@ class NodoPrintList(NodoAST):
     def __init__(self, variables):
         self.variables = variables # Es una lista de NodoPrint
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         codigo = []
         for variable in self.variables:
             # Cargar la variable en eax
-            codigo.append(variable.generar_codigo())
+            codigo.append(variable.generar_codigo(vars))
      
         return "\n".join(codigo)
 
@@ -523,7 +709,7 @@ class NodoCadena(NodoAST):
     def traducir(self):
         return f'"{self.valor}"'
     
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         return f'   mov eax, {self.valor} ; Cargar cadena {self.valor} en eax'
 
 
@@ -532,7 +718,7 @@ class NodoLlamadaFuncion(NodoAST):
         self.nombre = nombre
         self.argumentos = argumentos
 
-    def generar_codigo(self):
+    def generar_codigo(self, vars):
         codigo = []
         # Empujar argumentos en orden inverso
         for arg in reversed(self.argumentos):
@@ -660,8 +846,9 @@ class AnalizadorSemantico:
             self.tabla_simbolos.declarar_cadena(nombre_cadena, cadena)
             self.tabla_simbolos.declarar_variable(nombre_cadena, 'str')
         elif isinstance(nodo, NodoOperacion):
-            tipo_izq = self.analizar(nodo.izquierda)
-            tipo_der = self.analizar(nodo.derecha)
+            new = nodo.simplificar()
+            tipo_izq = self.analizar(new.izquierda)
+            tipo_der = self.analizar(new.derecha)
             if tipo_izq == tipo_der:
                 nodo.tipo = tipo_izq
                 return tipo_izq

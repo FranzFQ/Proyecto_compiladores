@@ -6,11 +6,13 @@ texto = """
 int main() {
     float a = 10.0;
     float b = 3.3;
+    int m = 3;
 
-    float c = a * b;
+    float c = 2.2 + 1.4 / b + a;
     float d = a / b;
     float e = a + b;
     float f = a - b;
+    float g = m + 1.2;
 
 
 
@@ -18,6 +20,7 @@ int main() {
     print(d);
     print(e);
     print(f);
+    print(g);
 
 }
 
