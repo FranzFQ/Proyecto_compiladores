@@ -414,9 +414,9 @@ class NodoOperacion(NodoAST):
             elif vars[der.nombre[1]] == 'float' and isinstance(izq.valor, int):
                 self.tipo = 'float'
                 codigo = []
-                codigo.append(izq.generar_codigo())
+                codigo.append(izq.generar_codigo(vars))
                 codigo.append("sub esp, 4\n   mov [esp], eax\n   fild dword [esp]\n   add esp, 4") # sirve para convertir el (identificador / numero) entero a flotante y dejarlo en pila
-                codigo.append(der.generar_codigo())
+                codigo.append(der.generar_codigo(vars))
 
                 if self.operador[1] == '+':
                     codigo.append('   faddp st1, st0')  # st1 = st1 + st0, pop st0
@@ -476,7 +476,7 @@ class NodoRetorno(NodoAST):
         return f"return {self.expresion.traducir()}"
 
     def generar_codigo(self, vars):
-        codigo = self.expresion.generar_codigo()
+        codigo = self.expresion.generar_codigo(vars)
         return f"{codigo}\n   ret ; Retornar desde la subrutina"
 
 class NodoIdentificador(NodoAST):
@@ -722,7 +722,7 @@ class NodoLlamadaFuncion(NodoAST):
         codigo = []
         # Empujar argumentos en orden inverso
         for arg in reversed(self.argumentos):
-            codigo.append(arg.generar_codigo())
+            codigo.append(arg.generar_codigo(vars))
             codigo.append("   push eax")
         
         codigo.append(f"   call {self.nombre[1]}")
