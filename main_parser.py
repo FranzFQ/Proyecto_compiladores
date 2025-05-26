@@ -4,22 +4,16 @@ from analizador import *
 
 texto = """
 int main() {
-    int a = 23;
-    int b = 4;
-    float c = 2.3 + b;
-    float d = 5.0;
-    float e;
-    input(e);
-    print("El valor ingresado es: ", e);
-    while (b < a) {
-        b = b + 1;
+    int a = 6;
+    int b = 5;
+    
+    if (a < b) {
+        print("a es menor que b");
 
-        d = d + 2.5;
-        print(d);
 
+    } else {
+        print("a es mayor que b");
     }
-    print("Fin del programa", b);
-
 
 }
 

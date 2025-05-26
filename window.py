@@ -392,6 +392,7 @@ class FlowScene(QGraphicsScene):
 
 
     def set_shape_type(self, shape_type):
+
         self.selected_shape = shape_type
         if shape_type is not None:
             self.set_connection_mode(False)
@@ -738,9 +739,12 @@ class FlowMainWindow(QMainWindow):
             for name, shape_type in shapes:
                 action = QAction(name, self)
                 action.triggered.connect(lambda checked, st=shape_type: self.scene.set_shape_type(st))
+                action.triggered.connect(self._reset_modes)
                 toolbar.addAction(action)
 
+
             toolbar.addSeparator()
+            
 
             # Configurar acciones con íconos y estado checkable
             self.select_action = QAction("Seleccionar", self)
@@ -808,6 +812,7 @@ class FlowMainWindow(QMainWindow):
 
     def _reset_modes(self):
         """Desactiva todos los modos y desmarca los botones"""
+        self.view.setCursor(QCursor(Qt.CursorShape.CrossCursor))
         self.select_action.setChecked(False)
         self.connect_action.setChecked(False)
         self.text_action.setChecked(False)

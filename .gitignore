@@ -3,4 +3,6 @@
 # Python cache files
 __pycache__/
 
-
+programa.asm
+programa
+programa.o

@@ -741,6 +741,10 @@ class TablaSimbolos:
         self.cadenas = {} # Almacena cadenas {nombre: valor}
         self.flotantes = {}
 
+    def modificar_cadena(self, nombre, valor):
+        if nombre in self.cadenas:
+            self.cadenas[nombre] = valor
+
     def declarar_flotante(self, nombre, valor):
         if nombre in self.flotantes:
             raise Exception(f"Error: Numero '{nombre}' ya declarado")
@@ -843,8 +847,11 @@ class AnalizadorSemantico:
             nombre_cadena = nodo.nombre[1]
             cadena = nodo.expresion
             # Verificar si la cadena ya existe
-            self.tabla_simbolos.declarar_cadena(nombre_cadena, cadena)
-            self.tabla_simbolos.declarar_variable(nombre_cadena, 'str')
+            if nombre_cadena in self.tabla_simbolos.cadenas:
+                self.tabla_simbolos.modificar_cadena(nombre_cadena, cadena)
+            else:
+                self.tabla_simbolos.declarar_cadena(nombre_cadena, cadena)
+                self.tabla_simbolos.declarar_variable(nombre_cadena, 'str')
         elif isinstance(nodo, NodoOperacion):
             new = nodo.simplificar()
             tipo_izq = self.analizar(new.izquierda)
